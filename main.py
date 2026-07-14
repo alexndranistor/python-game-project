@@ -35,6 +35,14 @@ CATASTROPHE_INTRO_TEXT = [
     "You awaken to find the world forever different...",
 ]
 
+SPRITE_INTRO_TEXT = [
+    "A tiny light flickers in front of you, and a small voice pipes up.",
+    "\"Oh! You're awake. Finally, someone worth talking to around here.\"",
+    "\"I'm your guide now, whether you like it or not. Call me Sprite.\"",
+    "\"That magic humming under your skin? That's no accident, dear.\"",
+    "\"Come on then. Let's see what you're made of.\"",
+]
+
 dialogue_lines = []
 current_line_index = 0
 revealed_chars = 0
@@ -58,6 +66,7 @@ def draw_title_screen():
         screen.blit(option_surface, option_rect)
         menu_option_rects.append(option_rect)
 
+
 def activate_menu_option(option_name):
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
@@ -67,11 +76,12 @@ def activate_menu_option(option_name):
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
-        next_state_after_dialogue = "GAME"
+        next_state_after_dialogue = "SPRITE_INTRO_START"
         game_state = "DIALOGUE"
     elif option_name == "Quit":
         pygame.quit()
         sys.exit()
+
 
 def handle_title_input(event):
     global selected_option
@@ -89,9 +99,8 @@ def handle_title_input(event):
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
         for i, rect in enumerate(menu_option_rects):
             if rect.collidepoint(event.pos):
-  
-  
                 activate_menu_option(menu_options[i])
+
 
 def draw_game_screen():
     screen.fill((30, 30, 30))
@@ -104,14 +113,42 @@ def draw_game_screen():
     name_rect = name_surface.get_rect(center=(protagonist["x"], protagonist["y"] - 40))
     screen.blit(name_surface, name_rect)
 
+def wrap_text(text, font, max_width):
+    words = text.split(" ")
+    lines = []
+    current_line = ""
+
+    for word in words:
+        test_line = current_line + word + " "
+        if font.size(test_line)[0] <= max_width:
+            current_line = test_line
+        else:
+            lines.append(current_line.rstrip())
+            current_line = word + " "
+
+    if current_line:
+        lines.append(current_line.rstrip())
+
+    return lines
+
+
+
 def draw_text_box(text):
-    box_rect = pygame.Rect(50, 450, SCREEN_WIDTH - 100, 120)
+    box_rect = pygame.Rect(50, 420, SCREEN_WIDTH - 100, 150)
     pygame.draw.rect(screen, BLACK, box_rect)
     pygame.draw.rect(screen, WHITE, box_rect, 3)
 
-    text_surface = dialogue_font.render(text, True, WHITE)
-    text_rect = text_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20))
-    screen.blit(text_surface, text_rect) 
+    max_text_width = box_rect.width - 40
+    wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
+    line_height = dialogue_font.get_linesize()
+
+    for i, line in enumerate(wrapped_lines):
+        line_surface = dialogue_font.render(line, True, WHITE)
+        line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20 + i * line_height))
+        screen.blit(line_surface, line_rect)
+
+
+
 
 
 def update_text_reveal():
@@ -137,6 +174,16 @@ def handle_dialogue_input(event):
             if current_line_index >= len(dialogue_lines):
                 game_state = next_state_after_dialogue
 
+def start_sprite_intro():
+    global dialogue_lines, current_line_index, revealed_chars
+    global last_reveal_time, next_state_after_dialogue, game_state
+
+    dialogue_lines = SPRITE_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "GAME"
+    game_state = "DIALOGUE"
 
 running = True
 while running:
@@ -147,6 +194,9 @@ while running:
             handle_title_input(event)
         elif game_state == "DIALOGUE":
             handle_dialogue_input(event)
+
+    if game_state == "SPRITE_INTRO_START":
+        start_sprite_intro()
 
     if game_state == "TITLE":
         draw_title_screen()
