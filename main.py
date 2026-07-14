@@ -35,6 +35,7 @@ DESERT_BG = (194, 178, 128)  # Sandy background colour for the desert biome
 title_font = pygame.font.SysFont(None, 64)
 menu_font = pygame.font.SysFont(None, 40)
 dialogue_font = pygame.font.SysFont(None, 32)
+hint_font = pygame.font.SysFont(None, 20)  # Small font for UI hints, like "press SPACE"
 
 # --- Core state machine ----------------------------------------------------
 # game_state controls which screen is drawn and which input handler runs
@@ -228,7 +229,8 @@ def wrap_text(text, font, max_width):
 def draw_text_box(text):
     """
     Draw the scrolling dialogue box at the bottom of the screen, containing
-    the given text, wrapped to fit inside the box.
+    the given text (wrapped to fit inside the box), plus a small hint
+    telling the player how to advance the dialogue.
 
     Args:
         text (str): The (possibly partially revealed) text to display.
@@ -246,6 +248,11 @@ def draw_text_box(text):
         line_surface = dialogue_font.render(line, True, WHITE)
         line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20 + i * line_height))
         screen.blit(line_surface, line_rect)
+
+    # Small persistent hint so the player always knows how to continue.
+    hint_surface = hint_font.render("Press SPACE to continue", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
+    screen.blit(hint_surface, hint_rect)
 
 def update_text_reveal():
     """
@@ -269,17 +276,21 @@ def handle_dialogue_input(event):
     """
     Handle player input while a dialogue text box is active.
 
-    Pressing Enter/Space either instantly finishes revealing the current
-    line (if it's still "typing"), or advances to the next line (if the
-    current line has already finished). Once the final line finishes, the
-    game moves on to whichever state next_state_after_dialogue specifies.
+    Both pressing Enter/Space and left-clicking the mouse do the same
+    thing: instantly finish revealing the current line (if it's still
+    "typing"), or advance to the next line (if the current line has
+    already finished). Once the final line finishes, the game moves on to
+    whichever state next_state_after_dialogue specifies.
 
     Args:
         event (pygame.event.Event): The event to process.
     """
     global current_line_index, revealed_chars, game_state
 
-    if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
+    key_pressed = event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE)
+    mouse_clicked = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+
+    if key_pressed or mouse_clicked:
         current_line = dialogue_lines[current_line_index]
 
         if revealed_chars < len(current_line):
@@ -290,7 +301,6 @@ def handle_dialogue_input(event):
             current_line_index += 1
             revealed_chars = 0
             if current_line_index >= len(dialogue_lines):
-                # No more lines left: hand control over to whatever comes next.
                 game_state = next_state_after_dialogue
 
 def start_sprite_intro():
