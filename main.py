@@ -12,9 +12,11 @@ clock = pygame.time.Clock()
 BARREN_BG = (120, 100, 70)
 WHITE = (255, 255, 255)
 HIGHLIGHT = (255, 215, 0)
+BLACK = (0, 0, 0)
 
 title_font = pygame.font.SysFont(None, 64)
 menu_font = pygame.font.SysFont(None, 40)
+dialogue_font = pygame.font.SysFont(None, 32)
 
 game_state = "TITLE"
 selected_option = 0
@@ -26,6 +28,19 @@ protagonist = {
     "x": SCREEN_WIDTH // 2,
     "y": SCREEN_HEIGHT // 2,
 }
+
+CATASTROPHE_INTRO_TEXT = [
+    "Long ago, this land was full of life and wonder.",
+    "But a great catastrophe struck, and everything changed.",
+    "You awaken to find the world forever different...",
+]
+
+dialogue_lines = []
+current_line_index = 0
+revealed_chars = 0
+text_reveal_speed = 30
+last_reveal_time = 0
+next_state_after_dialogue = "GAME"
 
 def draw_title_screen():
     global menu_option_rects
@@ -43,15 +58,20 @@ def draw_title_screen():
         screen.blit(option_surface, option_rect)
         menu_option_rects.append(option_rect)
 
-
 def activate_menu_option(option_name):
-    global game_state
+    global game_state, dialogue_lines, current_line_index
+    global revealed_chars, last_reveal_time, next_state_after_dialogue
+
     if option_name == "New Game":
-        game_state = "GAME"
+        dialogue_lines = CATASTROPHE_INTRO_TEXT
+        current_line_index = 0
+        revealed_chars = 0
+        last_reveal_time = pygame.time.get_ticks()
+        next_state_after_dialogue = "GAME"
+        game_state = "DIALOGUE"
     elif option_name == "Quit":
         pygame.quit()
         sys.exit()
-
 
 def handle_title_input(event):
     global selected_option
@@ -69,8 +89,9 @@ def handle_title_input(event):
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
         for i, rect in enumerate(menu_option_rects):
             if rect.collidepoint(event.pos):
+  
+  
                 activate_menu_option(menu_options[i])
-
 
 def draw_game_screen():
     screen.fill((30, 30, 30))
@@ -83,6 +104,40 @@ def draw_game_screen():
     name_rect = name_surface.get_rect(center=(protagonist["x"], protagonist["y"] - 40))
     screen.blit(name_surface, name_rect)
 
+def draw_text_box(text):
+    box_rect = pygame.Rect(50, 450, SCREEN_WIDTH - 100, 120)
+    pygame.draw.rect(screen, BLACK, box_rect)
+    pygame.draw.rect(screen, WHITE, box_rect, 3)
+
+    text_surface = dialogue_font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20))
+    screen.blit(text_surface, text_rect) 
+
+
+def update_text_reveal():
+    global revealed_chars, last_reveal_time
+    current_time = pygame.time.get_ticks()
+    current_line = dialogue_lines[current_line_index]
+
+    if revealed_chars < len(current_line):
+        if current_time - last_reveal_time >= text_reveal_speed:
+            revealed_chars += 1
+            last_reveal_time = current_time
+
+def handle_dialogue_input(event):
+    global current_line_index, revealed_chars, game_state
+
+    if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        current_line = dialogue_lines[current_line_index]
+        if revealed_chars < len(current_line):
+            revealed_chars = len(current_line)
+        else:
+            current_line_index += 1
+            revealed_chars = 0
+            if current_line_index >= len(dialogue_lines):
+                game_state = next_state_after_dialogue
+
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -90,9 +145,16 @@ while running:
             running = False
         elif game_state == "TITLE":
             handle_title_input(event)
+        elif game_state == "DIALOGUE":
+            handle_dialogue_input(event)
 
     if game_state == "TITLE":
         draw_title_screen()
+    elif game_state == "DIALOGUE":
+        update_text_reveal()
+        screen.fill(BARREN_BG)
+        current_line = dialogue_lines[current_line_index]
+        draw_text_box(current_line[:revealed_chars])
     elif game_state == "GAME":
         draw_game_screen()
 
@@ -100,4 +162,6 @@ while running:
     clock.tick(60)
 
 pygame.quit()
+
+
 
