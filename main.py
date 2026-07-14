@@ -1,18 +1,15 @@
 """
 My Game - a narrative exploration game built with Pygame.
 
-This file contains the game so far: the title screen, the opening dialogue
-sequence (the catastrophe intro and the sprite's introduction), and a
-placeholder desert biome room. The game uses a simple state machine (the
-`game_state` global variable) to decide what to draw and which inputs to
-listen for each frame.
+This file contains the game so far: the title screen, the opening
+catastrophe dialogue, and the desert biome (with basic player movement).
+The game uses a simple state machine (the `game_state` global variable) to
+decide what to draw and which inputs to listen for each frame.
 """
 
 import pygame
 import sys
 
-# Initialise all of Pygame's internal modules (fonts, display, etc.).
-# This must be called before creating the window or fonts.
 pygame.init()
 
 # --- Display setup ----------------------------------------------------
@@ -20,36 +17,34 @@ SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("My Game")
-
-# Controls the game's frame rate (see clock.tick(60) in the main loop).
 clock = pygame.time.Clock()
 
 # --- Colours (RGB tuples) ----------------------------------------------
-BARREN_BG = (120, 100, 70)   # Dry, barren background used on the title screen
+BARREN_BG = (120, 100, 70)
 WHITE = (255, 255, 255)
-HIGHLIGHT = (255, 215, 0)    # Gold highlight colour for the selected menu option
+HIGHLIGHT = (255, 215, 0)
 BLACK = (0, 0, 0)
-DESERT_BG = (194, 178, 128)  # Sandy background colour for the desert biome
+DESERT_BG = (194, 178, 128)
 
 # --- Fonts ---------------------------------------------------------------
 title_font = pygame.font.SysFont(None, 64)
 menu_font = pygame.font.SysFont(None, 40)
 dialogue_font = pygame.font.SysFont(None, 32)
-hint_font = pygame.font.SysFont(None, 20)  # Small font for UI hints, like "press SPACE"
+hint_font = pygame.font.SysFont(None, 20)
 
 # --- Core state machine ----------------------------------------------------
-# game_state controls which screen is drawn and which input handler runs
-# each frame. Valid values so far: "TITLE", "DIALOGUE", "GAME", "DESERT_ROOM".
+# Valid values so far: "TITLE", "DIALOGUE", "DESERT_ROOM".
 game_state = "TITLE"
 
 # --- Title screen menu state -------------------------------------------------
-selected_option = 0                 # Index of the currently highlighted menu option
+selected_option = 0
 menu_options = ["New Game", "Quit"]
-menu_option_rects = []              # Clickable pygame.Rect for each menu option, rebuilt every frame
+menu_option_rects = []
 
 # --- Player data -------------------------------------------------------------
-# Hardcoded default protagonist (real character customisation is deferred,
-# per the project's First Build Session Plan).
+PROTAGONIST_SIZE = 40   # Width/height in pixels of the protagonist's placeholder square
+PLAYER_SPEED = 4         # Pixels moved per frame while a direction key is held
+
 protagonist = {
     "name": "Protagonist",
     "x": SCREEN_WIDTH // 2,
@@ -57,31 +52,22 @@ protagonist = {
 }
 
 # --- Dialogue content ----------------------------------------------------------
-# Each of these is a list of strings; one string is shown at a time in the
-# scrolling text box (see draw_text_box / update_text_reveal / handle_dialogue_input).
 CATASTROPHE_INTRO_TEXT = [
     "Long ago, this land was full of life and wonder.",
     "But a great catastrophe struck, and everything changed.",
     "You awaken to find the world forever different...",
 ]
-
-SPRITE_INTRO_TEXT = [
-    "A tiny light flickers in front of you, and a small voice pipes up.",
-    "\"Oh! You're awake. Finally, someone worth talking to around here.\"",
-    "\"I'm your guide now, whether you like it or not. Call me Sprite.\"",
-    "\"That magic humming under your skin? That's no accident, dear.\"",
-    "\"Come on then. Let's see what you're made of.\"",
-]
+# Note: the sprite's real first-appearance dialogue will be added in the
+# next change, triggered by walking into the desert's decoy flower -
+# rather than shown automatically here.
 
 # --- Dialogue system state ---------------------------------------------------------
-# These track progress through whichever dialogue is currently active
-# (set to CATASTROPHE_INTRO_TEXT, SPRITE_INTRO_TEXT, or any future dialogue list).
-dialogue_lines = []                   # The list of lines currently being shown
-current_line_index = 0                # Which line of dialogue_lines is currently displayed
-revealed_chars = 0                    # How many characters of the current line have "typed" in so far
-text_reveal_speed = 30                # Milliseconds between each newly revealed character
-last_reveal_time = 0                  # Timestamp (ms) the last character was revealed, for timing the effect
-next_state_after_dialogue = "GAME"    # Which game_state to switch to once the dialogue finishes
+dialogue_lines = []
+current_line_index = 0
+revealed_chars = 0
+text_reveal_speed = 30
+last_reveal_time = 0
+next_state_after_dialogue = "DESERT_ROOM"
 
 # --- Desert biome placeholder text -------------------------------------------------
 DESERT_ROOM_DESCRIPTION = (
@@ -93,28 +79,22 @@ def draw_title_screen():
     """
     Draw the title screen: the game's title text and the New Game / Quit
     menu, highlighting whichever option is currently selected.
-
-    Also rebuilds `menu_option_rects` every frame, so that mouse clicks and
-    hovering (handled in handle_title_input) always line up with where the
-    menu text is actually drawn on screen.
     """
     global menu_option_rects
     screen.fill(BARREN_BG)
 
-    # Draw the game's title near the top of the screen.
     title_surface = title_font.render("MY GAME TITLE", True, WHITE)
     title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150))
     screen.blit(title_surface, title_rect)
 
-    # Draw each menu option, highlighting the currently selected one in gold.
     menu_option_rects = []
     for i, option in enumerate(menu_options):
         color = HIGHLIGHT if i == selected_option else WHITE
         option_surface = menu_font.render(option, True, color)
         option_rect = option_surface.get_rect(center=(SCREEN_WIDTH // 2, 300 + i * 60))
         screen.blit(option_surface, option_rect)
-        # Store this option's rectangle so mouse input can check hover/clicks against it.
         menu_option_rects.append(option_rect)
+
 
 def activate_menu_option(option_name):
     """
@@ -128,18 +108,18 @@ def activate_menu_option(option_name):
     global revealed_chars, last_reveal_time, next_state_after_dialogue
 
     if option_name == "New Game":
-        # Start the catastrophe intro dialogue. Once it finishes, move on
-        # to the sprite's introduction (see next_state_after_dialogue).
+        # Start the catastrophe intro. Once it finishes, drop straight
+        # into the desert biome (no separate sprite-intro screen anymore).
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
-        next_state_after_dialogue = "SPRITE_INTRO_START"
+        next_state_after_dialogue = "DESERT_ROOM"
         game_state = "DIALOGUE"
     elif option_name == "Quit":
-        # Cleanly shut down Pygame before exiting the program.
         pygame.quit()
         sys.exit()
+
 
 def handle_title_input(event):
     """
@@ -153,45 +133,22 @@ def handle_title_input(event):
 
     if event.type == pygame.KEYDOWN:
         if event.key == pygame.K_UP:
-            # Move selection up, wrapping around to the bottom option with %.
             selected_option = (selected_option - 1) % len(menu_options)
         elif event.key == pygame.K_DOWN:
-            # Move selection down, wrapping around to the top option with %.
             selected_option = (selected_option + 1) % len(menu_options)
         elif event.key == pygame.K_RETURN:
             activate_menu_option(menu_options[selected_option])
 
     elif event.type == pygame.MOUSEMOTION:
-        # Update the selected option to whichever one the mouse is hovering over.
         for i, rect in enumerate(menu_option_rects):
             if rect.collidepoint(event.pos):
                 selected_option = i
 
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-        # Left mouse button clicked: activate the option under the cursor, if any.
         for i, rect in enumerate(menu_option_rects):
             if rect.collidepoint(event.pos):
                 activate_menu_option(menu_options[i])
 
-
-def draw_game_screen():
-    """
-    Draw a temporary placeholder "in-game" screen: a plain square standing
-    in for the protagonist's sprite, labelled with their name. This exists
-    purely to prove the protagonist data is being read and used, ahead of
-    real sprite art and real gameplay rooms.
-    """
-    screen.fill((30, 30, 30))
-
-    # A simple square standing in for the protagonist until real art exists.
-    protagonist_rect = pygame.Rect(0, 0, 40, 40)
-    protagonist_rect.center = (protagonist["x"], protagonist["y"])
-    pygame.draw.rect(screen, WHITE, protagonist_rect)
-
-    # Print the protagonist's name just above the square.
-    name_surface = menu_font.render(protagonist["name"], True, WHITE)
-    name_rect = name_surface.get_rect(center=(protagonist["x"], protagonist["y"] - 40))
-    screen.blit(name_surface, name_rect)
 
 def wrap_text(text, font, max_width):
     """
@@ -212,12 +169,9 @@ def wrap_text(text, font, max_width):
 
     for word in words:
         test_line = current_line + word + " "
-        # font.size() measures how wide this text would be if rendered, in pixels.
         if font.size(test_line)[0] <= max_width:
             current_line = test_line
         else:
-            # Adding this word would overflow the box, so close off the
-            # current line and start a new one with this word.
             lines.append(current_line.rstrip())
             current_line = word + " "
 
@@ -225,6 +179,7 @@ def wrap_text(text, font, max_width):
         lines.append(current_line.rstrip())
 
     return lines
+
 
 def draw_text_box(text):
     """
@@ -237,9 +192,8 @@ def draw_text_box(text):
     """
     box_rect = pygame.Rect(50, 420, SCREEN_WIDTH - 100, 150)
     pygame.draw.rect(screen, BLACK, box_rect)
-    pygame.draw.rect(screen, WHITE, box_rect, 3)  # 3px border
+    pygame.draw.rect(screen, WHITE, box_rect, 3)
 
-    # Leave 20px of padding on each side of the box for the wrapped text.
     max_text_width = box_rect.width - 40
     wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
     line_height = dialogue_font.get_linesize()
@@ -249,18 +203,15 @@ def draw_text_box(text):
         line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    # Small persistent hint so the player always knows how to continue.
     hint_surface = hint_font.render("Press SPACE to continue", True, (180, 180, 180))
     hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
     screen.blit(hint_surface, hint_rect)
+
 
 def update_text_reveal():
     """
     Advance the typewriter-style text reveal by one character, if enough
     time has passed since the last character was revealed.
-
-    Reads and updates the dialogue system's global state (current_line_index,
-    revealed_chars, last_reveal_time).
     """
     global revealed_chars, last_reveal_time
     current_time = pygame.time.get_ticks()
@@ -271,16 +222,10 @@ def update_text_reveal():
             revealed_chars += 1
             last_reveal_time = current_time
 
-
 def handle_dialogue_input(event):
     """
-    Handle player input while a dialogue text box is active.
-
-    Both pressing Enter/Space and left-clicking the mouse do the same
-    thing: instantly finish revealing the current line (if it's still
-    "typing"), or advance to the next line (if the current line has
-    already finished). Once the final line finishes, the game moves on to
-    whichever state next_state_after_dialogue specifies.
+    Handle player input while a dialogue text box is active. Both
+    pressing Enter/Space and left-clicking the mouse advance the dialogue.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -294,40 +239,44 @@ def handle_dialogue_input(event):
         current_line = dialogue_lines[current_line_index]
 
         if revealed_chars < len(current_line):
-            # Line hasn't finished "typing" yet: skip straight to showing it in full.
             revealed_chars = len(current_line)
         else:
-            # Line has finished: move on to the next one.
             current_line_index += 1
             revealed_chars = 0
             if current_line_index >= len(dialogue_lines):
                 game_state = next_state_after_dialogue
 
-def start_sprite_intro():
+def handle_desert_movement():
     """
-    Set up and start the sprite's introduction dialogue. Called once the
-    catastrophe intro dialogue finishes (see next_state_after_dialogue).
+    Update the protagonist's position based on which arrow keys are
+    currently held down, keeping them fully on-screen.
+
+    Unlike the event-based input handlers above (which react once per
+    key-press event), movement needs to respond continuously for as long
+    as a key is held - so this checks the keyboard's current state
+    directly every frame, via pygame.key.get_pressed().
     """
-    global dialogue_lines, current_line_index, revealed_chars
-    global last_reveal_time, next_state_after_dialogue, game_state
+    keys = pygame.key.get_pressed()
 
-    dialogue_lines = SPRITE_INTRO_TEXT
-    current_line_index = 0
-    revealed_chars = 0
-    last_reveal_time = pygame.time.get_ticks()
-    # Once the sprite's introduction finishes, move on to the desert biome.
-    next_state_after_dialogue = "DESERT_ROOM"
-    game_state = "DIALOGUE" 
+    if keys[pygame.K_LEFT]:
+        protagonist["x"] -= PLAYER_SPEED
+    if keys[pygame.K_RIGHT]:
+        protagonist["x"] += PLAYER_SPEED
+    if keys[pygame.K_UP]:
+        protagonist["y"] -= PLAYER_SPEED
+    if keys[pygame.K_DOWN]:
+        protagonist["y"] += PLAYER_SPEED
 
+    # Clamp position so the protagonist can never move off-screen.
+    half_size = PROTAGONIST_SIZE // 2
+    protagonist["x"] = max(half_size, min(SCREEN_WIDTH - half_size, protagonist["x"]))
+    protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
 
 def draw_desert_room():
     """
-    Draw a placeholder version of the desert biome: a plain sandy
-    background with a wrapped block of descriptive text.
-
-    This is intentionally simple (no puzzle logic, no real art yet) - its
-    only job is to prove the full chain (title -> intro -> sprite ->
-    desert) runs start to finish, before any real desert gameplay is built.
+    Draw the desert biome: a sandy background, a short description of the
+    surroundings, and the protagonist (a placeholder square until real
+    sprite art exists) at their current, player-controlled position.
     """
     screen.fill(DESERT_BG)
 
@@ -340,9 +289,12 @@ def draw_desert_room():
         line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
         screen.blit(line_surface, line_rect)
 
+    protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
+    protagonist_rect.center = (protagonist["x"], protagonist["y"])
+    pygame.draw.rect(screen, WHITE, protagonist_rect)
+
 running = True
 while running:
-    # --- Handle input events --------------------------------------------
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -351,12 +303,6 @@ while running:
         elif game_state == "DIALOGUE":
             handle_dialogue_input(event)
 
-    # --- One-frame "trigger" state: sets up the sprite intro, then hands
-    # off to the DIALOGUE state before anything is drawn this frame. ------
-    if game_state == "SPRITE_INTRO_START":
-        start_sprite_intro()
-
-    # --- Draw whichever screen matches the current game_state -----------
     if game_state == "TITLE":
         draw_title_screen()
     elif game_state == "DIALOGUE":
@@ -364,16 +310,14 @@ while running:
         screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
         draw_text_box(current_line[:revealed_chars])
-    elif game_state == "GAME":
-        draw_game_screen()
     elif game_state == "DESERT_ROOM":
+        handle_desert_movement()
         draw_desert_room()
 
     pygame.display.flip()
     clock.tick(60)
 
 pygame.quit()
-
 
 
 
