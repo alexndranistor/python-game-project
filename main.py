@@ -21,6 +21,12 @@ selected_option = 0
 menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
+protagonist = {
+    "name": "Protagonist",
+    "x": SCREEN_WIDTH // 2,
+    "y": SCREEN_HEIGHT // 2,
+}
+
 def draw_title_screen():
     global menu_option_rects
     screen.fill(BARREN_BG)
@@ -37,6 +43,7 @@ def draw_title_screen():
         screen.blit(option_surface, option_rect)
         menu_option_rects.append(option_rect)
 
+
 def activate_menu_option(option_name):
     global game_state
     if option_name == "New Game":
@@ -44,6 +51,7 @@ def activate_menu_option(option_name):
     elif option_name == "Quit":
         pygame.quit()
         sys.exit()
+
 
 def handle_title_input(event):
     global selected_option
@@ -63,6 +71,18 @@ def handle_title_input(event):
             if rect.collidepoint(event.pos):
                 activate_menu_option(menu_options[i])
 
+
+def draw_game_screen():
+    screen.fill((30, 30, 30))
+
+    protagonist_rect = pygame.Rect(0, 0, 40, 40)
+    protagonist_rect.center = (protagonist["x"], protagonist["y"])
+    pygame.draw.rect(screen, WHITE, protagonist_rect)
+
+    name_surface = menu_font.render(protagonist["name"], True, WHITE)
+    name_rect = name_surface.get_rect(center=(protagonist["x"], protagonist["y"] - 40))
+    screen.blit(name_surface, name_rect)
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -74,7 +94,7 @@ while running:
     if game_state == "TITLE":
         draw_title_screen()
     elif game_state == "GAME":
-        screen.fill((30, 30, 30))
+        draw_game_screen()
 
     pygame.display.flip()
     clock.tick(60)
