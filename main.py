@@ -19,6 +19,12 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("My Game")
 clock = pygame.time.Clock()
 
+# --- Desert control hint (fades out after appearing) --------------------
+previous_game_state = None       # Tracks the last frame's game_state, to detect state changes
+desert_hint_start_time = 0       # Timestamp (ms) the player entered the desert room
+HINT_VISIBLE_DURATION = 2000     # How long the control hint stays fully visible (ms)
+HINT_FADE_DURATION = 1000        # How long it takes to fade out after that (ms)
+
 # --- Colours (RGB tuples) ----------------------------------------------
 BARREN_BG = (120, 100, 70)
 WHITE = (255, 255, 255)
@@ -246,37 +252,33 @@ def handle_dialogue_input(event):
             if current_line_index >= len(dialogue_lines):
                 game_state = next_state_after_dialogue
 
+
 def handle_desert_movement():
     """
-    Update the protagonist's position based on which arrow keys are
-    currently held down, keeping them fully on-screen.
-
-    Unlike the event-based input handlers above (which react once per
-    key-press event), movement needs to respond continuously for as long
-    as a key is held - so this checks the keyboard's current state
-    directly every frame, via pygame.key.get_pressed().
+    Update the protagonist's position based on which movement keys are
+    currently held down (arrow keys or WASD), keeping them fully on-screen.
     """
     keys = pygame.key.get_pressed()
 
-    if keys[pygame.K_LEFT]:
+    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         protagonist["x"] -= PLAYER_SPEED
-    if keys[pygame.K_RIGHT]:
+    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
         protagonist["x"] += PLAYER_SPEED
-    if keys[pygame.K_UP]:
+    if keys[pygame.K_UP] or keys[pygame.K_w]:
         protagonist["y"] -= PLAYER_SPEED
-    if keys[pygame.K_DOWN]:
+    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
         protagonist["y"] += PLAYER_SPEED
 
-    # Clamp position so the protagonist can never move off-screen.
     half_size = PROTAGONIST_SIZE // 2
     protagonist["x"] = max(half_size, min(SCREEN_WIDTH - half_size, protagonist["x"]))
     protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
 
+
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, and the protagonist (a placeholder square until real
-    sprite art exists) at their current, player-controlled position.
+    surroundings, the protagonist at their current position, and a
+    fading movement-control hint if it's still within its display window.
     """
     screen.fill(DESERT_BG)
 
@@ -293,6 +295,35 @@ def draw_desert_room():
     protagonist_rect.center = (protagonist["x"], protagonist["y"])
     pygame.draw.rect(screen, WHITE, protagonist_rect)
 
+    draw_control_hint()
+
+
+def draw_control_hint():
+    """
+    Draw a temporary "Use ARROW KEYS or WASD to move" prompt near the
+    bottom of the desert room, shown briefly when the player first
+    arrives and then fading out - similar to the on-screen control
+    reminders most games show when you enter a new area.
+    """
+    elapsed = pygame.time.get_ticks() - desert_hint_start_time
+    total_duration = HINT_VISIBLE_DURATION + HINT_FADE_DURATION
+
+    if elapsed >= total_duration:
+        return  # The hint has fully finished; nothing left to draw.
+
+    if elapsed <= HINT_VISIBLE_DURATION:
+        alpha = 255  # Fully visible
+    else:
+        # Linearly fade from fully visible (255) down to invisible (0).
+        fade_elapsed = elapsed - HINT_VISIBLE_DURATION
+        alpha = max(0, 255 - int((fade_elapsed / HINT_FADE_DURATION) * 255))
+
+    hint_surface = menu_font.render("Use ARROW KEYS or WASD to move", True, WHITE)
+    hint_surface.set_alpha(alpha)
+    hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+    screen.blit(hint_surface, hint_rect)
+
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -302,6 +333,12 @@ while running:
             handle_title_input(event)
         elif game_state == "DIALOGUE":
             handle_dialogue_input(event)
+
+    # Detect the exact frame the player arrives in the desert room, so the
+    # control hint's fade timer starts from the correct moment.
+    if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
+        desert_hint_start_time = pygame.time.get_ticks()
+    previous_game_state = game_state
 
     if game_state == "TITLE":
         draw_title_screen()
