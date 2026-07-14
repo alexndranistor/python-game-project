@@ -39,7 +39,7 @@ dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
 # --- Core state machine ----------------------------------------------------
-# Valid values so far: "TITLE", "DIALOGUE", "DESERT_ROOM".
+# Valid values so far: "TITLE", "DIALOGUE", "DESERT_ROOM" , "PAUSED", "SETTINGS_PLACEHOLDER"
 game_state = "TITLE"
 
 # --- Title screen menu state -------------------------------------------------
@@ -56,6 +56,25 @@ protagonist = {
     "x": SCREEN_WIDTH // 2,
     "y": SCREEN_HEIGHT // 2,
 }
+
+# --- Pause menu state ---------------------------------------------------
+pause_menu_options = ["Settings", "Save", "Quit Game"]
+pause_selected_option = 0
+pause_option_rects = []
+paused_from_state = None  # Which gameplay state to return to when unpausing
+
+# --- Placeholder screens (Settings & Save aren't built yet) --------------
+PLACEHOLDER_SCREENS = {
+    "SETTINGS_PLACEHOLDER": (
+        "Settings",
+        "Coming soon - once real music and sound effects are added.",
+    ),
+    "SAVE_PLACEHOLDER": (
+        "Save",
+        "Coming soon - saving your progress isn't implemented yet.",
+    ),
+}
+
 
 # --- Dialogue content ----------------------------------------------------------
 CATASTROPHE_INTRO_TEXT = [
@@ -323,6 +342,134 @@ def draw_control_hint():
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
+def handle_desert_room_input(event):
+    """
+    Handle discrete (single-press) events while the desert room is
+    active - currently just opening the pause menu with ESCAPE. Continuous
+    movement is handled separately in handle_desert_movement().
+
+    Args:
+        event (pygame.event.Event): The event to process.
+    """
+    global game_state, paused_from_state, pause_selected_option
+
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+        paused_from_state = "DESERT_ROOM"
+        pause_selected_option = 0
+        game_state = "PAUSED"
+
+
+def draw_pause_menu():
+    """
+    Draw the pause menu: a simple dark screen with "Paused" and three
+    selectable options (Settings, Save, Quit Game), shown when the player
+    presses ESCAPE during gameplay.
+    """
+    global pause_option_rects
+    screen.fill((20, 20, 20))
+
+    title_surface = title_font.render("Paused", True, WHITE)
+    title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150))
+    screen.blit(title_surface, title_rect)
+
+    pause_option_rects = []
+    for i, option in enumerate(pause_menu_options):
+        color = HIGHLIGHT if i == pause_selected_option else WHITE
+        option_surface = menu_font.render(option, True, color)
+        option_rect = option_surface.get_rect(center=(SCREEN_WIDTH // 2, 300 + i * 60))
+        screen.blit(option_surface, option_rect)
+        pause_option_rects.append(option_rect)
+
+    hint_surface = hint_font.render("Press ESC to resume", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+    screen.blit(hint_surface, hint_rect)
+
+def activate_pause_option(option_name):
+    """
+    Perform whatever should happen when a pause menu option is chosen.
+
+    Args:
+        option_name (str): The label of the chosen option.
+    """
+    global game_state
+
+    if option_name == "Settings":
+        game_state = "SETTINGS_PLACEHOLDER"
+    elif option_name == "Save":
+        game_state = "SAVE_PLACEHOLDER"
+    elif option_name == "Quit Game":
+        pygame.quit()
+        sys.exit()
+
+
+def handle_pause_input(event):
+    """
+    Handle a single Pygame event while the pause menu is active: keyboard
+    navigation, mouse hover/click, and resuming with ESCAPE.
+
+    Args:
+        event (pygame.event.Event): The event to process.
+    """
+    global pause_selected_option, game_state
+
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_ESCAPE:
+            game_state = paused_from_state  # Resume the paused gameplay state
+        elif event.key == pygame.K_UP:
+            pause_selected_option = (pause_selected_option - 1) % len(pause_menu_options)
+        elif event.key == pygame.K_DOWN:
+            pause_selected_option = (pause_selected_option + 1) % len(pause_menu_options)
+        elif event.key == pygame.K_RETURN:
+            activate_pause_option(pause_menu_options[pause_selected_option])
+
+    elif event.type == pygame.MOUSEMOTION:
+        for i, rect in enumerate(pause_option_rects):
+            if rect.collidepoint(event.pos):
+                pause_selected_option = i
+
+    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        for i, rect in enumerate(pause_option_rects):
+            if rect.collidepoint(event.pos):
+                activate_pause_option(pause_menu_options[i])
+
+
+def draw_placeholder_screen():
+    """
+    Draw a simple "coming soon" screen for a feature that doesn't exist
+    yet (Settings or Save), using the title/message stored in
+    PLACEHOLDER_SCREENS for whichever placeholder state is currently active.
+    """
+    screen.fill((20, 20, 20))
+    title_text, message_text = PLACEHOLDER_SCREENS[game_state]
+
+    title_surface = title_font.render(title_text, True, WHITE)
+    title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 200))
+    screen.blit(title_surface, title_rect)
+
+    wrapped_lines = wrap_text(message_text, dialogue_font, SCREEN_WIDTH - 100)
+    line_height = dialogue_font.get_linesize()
+    for i, line in enumerate(wrapped_lines):
+        line_surface = dialogue_font.render(line, True, WHITE)
+        line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 300 + i * line_height))
+        screen.blit(line_surface, line_rect)
+
+    hint_surface = hint_font.render("Press ESC to go back", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+    screen.blit(hint_surface, hint_rect)
+
+def handle_placeholder_input(event):
+    """
+    Handle input on a placeholder screen (Settings or Save): pressing
+    ESCAPE returns to the pause menu.
+
+    Args:
+        event (pygame.event.Event): The event to process.
+    """
+    global game_state
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+        game_state = "PAUSED"
+
+
 
 running = True
 while running:
@@ -333,6 +480,12 @@ while running:
             handle_title_input(event)
         elif game_state == "DIALOGUE":
             handle_dialogue_input(event)
+        elif game_state == "DESERT_ROOM":
+            handle_desert_room_input(event)
+        elif game_state == "PAUSED":
+            handle_pause_input(event)
+        elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
+            handle_placeholder_input(event)
 
     # Detect the exact frame the player arrives in the desert room, so the
     # control hint's fade timer starts from the correct moment.
@@ -350,11 +503,17 @@ while running:
     elif game_state == "DESERT_ROOM":
         handle_desert_movement()
         draw_desert_room()
+    elif game_state == "PAUSED":
+        draw_pause_menu()
+    elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
+        draw_placeholder_screen()
 
     pygame.display.flip()
     clock.tick(60)
 
 pygame.quit()
+
+
 
 
 
