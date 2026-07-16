@@ -170,6 +170,7 @@ sprite_draw_pos = [0, 0]          # Current on-screen position, recalculated eve
 MAX_HP = 100
 hp = MAX_HP
 heat_drain_active = False   # Becomes True once the sprite's warning dialogue finishes
+heat_immune = False         # Once True (after eating the ice flower), the heat can never drain HP again
 last_hp_tick_time = 0
 HP_DRAIN_INTERVAL = 1000    # Milliseconds between each 1-point HP loss
 HP_BAR_POS = (20, 20)
@@ -677,9 +678,15 @@ def activate_heat_drain():
     Turn on the desert heat's HP drain and reset its internal timer.
     Called as soon as the player first enters the desert room (see the
     main loop), so the heat starts affecting them right away rather
-    than waiting for the sprite's warning dialogue to finish.
+    than waiting for the sprite's warning dialogue to finish. Does
+    nothing once heat_immune is True (i.e. once the ice flower has
+    already been eaten), so the heat can never accidentally come back
+    on later.
     """
     global heat_drain_active, last_hp_tick_time
+
+    if heat_immune:
+        return
 
     heat_drain_active = True
     last_hp_tick_time = pygame.time.get_ticks()
@@ -691,11 +698,13 @@ def update_heat_drain():
     """
     Drain the protagonist's HP by 1 point per second while heat_drain_active
     is True, simulating the desert heat's ongoing effect until it's cured.
-    HP is floored at 0.
+    HP is floored at 0. Also stops immediately (and for good) once
+    heat_immune is True, as a second safeguard alongside heat_drain_active
+    already being turned off in consume_ice_flower().
     """
     global hp, last_hp_tick_time
 
-    if not heat_drain_active or hp <= 0:
+    if heat_immune or not heat_drain_active or hp <= 0:
         return
 
     current_time = pygame.time.get_ticks()
@@ -896,19 +905,21 @@ def handle_interaction_key():
 
 def consume_ice_flower():
     """
-    Eating the ice flower restores 80 HP (capped at MAX_HP) and stops the
-    ongoing heat drain, then shows the item info popup and a floating
-    "+80 HP" callout explaining what just happened.
+    Eating the ice flower restores 80 HP (capped at MAX_HP) and grants
+    permanent immunity to the desert heat, so it can never drain HP
+    again for the rest of the playthrough. Also shows the item info
+    popup and a floating "+80 HP" callout explaining what just happened.
     """
-    global ice_flower_collected, hp, heat_drain_active
+    global ice_flower_collected, hp, heat_drain_active, heat_immune
 
     ice_flower_collected = True
     hp = min(MAX_HP, hp + 80)
     heat_drain_active = False
+    heat_immune = True
 
     show_item_popup(
         title="Ice Flower",
-        description="A pale, icy-cool flower. Eating it soothes the desert heat and restores 80 HP.",
+        description="A pale, icy-cool flower. Eating it soothes the desert heat, restores 80 HP, and grants lasting immunity to the heat for the rest of your journey.",
         icon_path=None,
     )
     show_hp_heal_popup(80)
