@@ -169,6 +169,12 @@ dialogue_on_complete = None
 DESERT_WORLD_WIDTH = 1600  # The desert extends further than a single screen
 camera_x = 0                # How far the camera has scrolled from the world's left edge
 
+# --- Arrow directing player to go left ---------------------------------------------
+LEFT_ARROW_COLOR = (255, 221, 89)      # Bright gold, easy to spot against the desert
+LEFT_ARROW_FLASH_PERIOD = 500           # Milliseconds for one full on/off blink cycle
+LEFT_ARROW_CENTER = (80, 260)           # Screen position, above the dialogue box
+LEFT_ARROW_SIZE = 40
+
 def draw_title_screen():
     """
     the game's title text and the New Game / Quit
@@ -781,7 +787,25 @@ def draw_decoy_flower_glow():
     glow_rect = glow_surface.get_rect(center=(int(screen_x), int(screen_y)))
     screen.blit(glow_surface, glow_rect)
 
+def draw_left_arrow_hint():
+    """
+    Draw a flashing, left-pointing arrow to reinforce the
+    sprite's "go left" line. It blinks on and off by checking the
+    current time against LEFT_ARROW_FLASH_PERIOD, the same trick
+    used elsewhere for the fading control hint.
+    """
+    is_visible = (pygame.time.get_ticks() % LEFT_ARROW_FLASH_PERIOD) < (LEFT_ARROW_FLASH_PERIOD // 2)
+    if not is_visible:
+        return
 
+    center_x, center_y = LEFT_ARROW_CENTER
+    half = LEFT_ARROW_SIZE // 2
+    arrow_points = [
+        (center_x - half, center_y),        # Left tip
+        (center_x + half, center_y - half),  # Top right corner
+        (center_x + half, center_y + half),  # Bottom right corner
+    ]
+    pygame.draw.polygon(screen, LEFT_ARROW_COLOR, arrow_points)
 
 
 running = True
@@ -823,6 +847,8 @@ while running:
         else:
             screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
+        if current_line == "\"Quick - go left! There should be a flower that way that can help you.\"":
+            draw_left_arrow_hint()
         draw_text_box(current_line[:revealed_chars])
     elif game_state == "DESERT_ROOM":
         draw_desert_room()
@@ -835,5 +861,3 @@ while running:
     clock.tick(60)
 
 pygame.quit()
-
-
