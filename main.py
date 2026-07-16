@@ -117,7 +117,11 @@ SPRITE_FLOWER_WARNING_TEXT = [
     "\"Anyway. If you want, I can show you how to deal with that heat that's been quietly cooking you this whole time.\"",
 ]
 
-
+# --- Sprite companion (placeholder appearance for now) -------------------
+SPRITE_CHAR_COLOR = (255, 240, 150)   # Warm glow colour
+SPRITE_CHAR_RADIUS = 10
+SPRITE_CHAR_OFFSET = (35, -35)         # Position relative to the protagonist, no real movement yet
+sprite_character_visible = False       # Becomes True once the sprite makes her first appearance
 
 def draw_title_screen():
     """
@@ -317,8 +321,9 @@ def handle_desert_movement():
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, the decoy flower, the protagonist at their current
-    position, and a fading movement-control hint if it's still active.
+    surroundings, the decoy flower, the sprite companion (once she's
+    appeared), the protagonist at their current position, and a fading
+    movement-control hint if it's still active.
     """
     screen.fill(DESERT_BG)
 
@@ -336,6 +341,8 @@ def draw_desert_room():
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
     protagonist_rect.center = (protagonist["x"], protagonist["y"])
     pygame.draw.rect(screen, WHITE, protagonist_rect)
+
+    draw_sprite_character()
 
     draw_control_hint()
 
@@ -508,7 +515,7 @@ def check_decoy_flower_trigger():
     """
     global decoy_flower_encountered, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue, game_state
-    global dialogue_backdrop_state
+    global dialogue_backdrop_state, sprite_character_visible
 
     if decoy_flower_encountered:
         return
@@ -524,8 +531,22 @@ def check_decoy_flower_trigger():
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
-        dialogue_backdrop_state = "DESERT_ROOM"  # Keep the desert visible behind the dialogue
+        dialogue_backdrop_state = "DESERT_ROOM"
+        sprite_character_visible = True  # She's now made her entrance
         game_state = "DIALOGUE"
+
+def draw_sprite_character():
+    """
+    Draw a placeholder for the sprite companion: a small glowing circle
+    that hovers near the protagonist. This is a skeleton stand-in until
+    real sprite artwork and movement/animation are added.
+    """
+    if not sprite_character_visible:
+        return
+
+    sprite_x = protagonist["x"] + SPRITE_CHAR_OFFSET[0]
+    sprite_y = protagonist["y"] + SPRITE_CHAR_OFFSET[1]
+    pygame.draw.circle(screen, SPRITE_CHAR_COLOR, (sprite_x, sprite_y), SPRITE_CHAR_RADIUS)
 
 running = True
 while running:
