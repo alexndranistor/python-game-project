@@ -118,10 +118,31 @@ SPRITE_FLOWER_WARNING_TEXT = [
 ]
 
 # --- Sprite companion (placeholder appearance for now) -------------------
-SPRITE_CHAR_COLOR = (255, 240, 150)   # Warm glow colour
+SPRITE_CHAR_COLOR = (255, 240, 150)
 SPRITE_CHAR_RADIUS = 10
-SPRITE_CHAR_OFFSET = (35, -35)         # Position relative to the protagonist, no real movement yet
-sprite_character_visible = False       # Becomes True once the sprite makes her first appearance
+SPRITE_CHAR_OFFSET = (35, -35)   # Position relative to the protagonist, once hovering
+SPRITE_ENTRANCE_DURATION = 700    # Milliseconds for the fly-in entrance
+SPRITE_ENTRANCE_START_Y = -50     # Starting y position (above the screen) for the fly-in
+SPRITE_HOVER_AMPLITUDE = 6        # Pixels the sprite bobs up/down while hovering
+SPRITE_HOVER_PERIOD = 1200        # Milliseconds for one full up-down bob cycle
+
+sprite_state = "HIDDEN"           # "HIDDEN", "ENTERING", or "HOVERING"
+sprite_entrance_start_time = 0
+sprite_draw_pos = [0, 0]          # Current on-screen position, recalculated every frame
+
+
+# --- HP / heat drain system ------------------------------------------------
+MAX_HP = 100
+hp = MAX_HP
+heat_drain_active = False   # Becomes True once the sprite's warning dialogue finishes
+last_hp_tick_time = 0
+HP_DRAIN_INTERVAL = 1000    # Milliseconds between each 1-point HP loss
+HP_BAR_POS = (20, 20)
+HP_BAR_WIDTH = 200
+HP_BAR_HEIGHT = 20
+
+dialogue_on_complete = None  
+
 
 def draw_title_screen():
     """
@@ -280,14 +301,13 @@ def handle_dialogue_input(event):
     Args:
         event (pygame.event.Event): The event to process.
     """
-    global current_line_index, revealed_chars, game_state
+    global current_line_index, revealed_chars, game_state, dialogue_on_complete
 
     key_pressed = event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE)
     mouse_clicked = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
 
     if key_pressed or mouse_clicked:
         current_line = dialogue_lines[current_line_index]
-
         if revealed_chars < len(current_line):
             revealed_chars = len(current_line)
         else:
@@ -295,7 +315,9 @@ def handle_dialogue_input(event):
             revealed_chars = 0
             if current_line_index >= len(dialogue_lines):
                 game_state = next_state_after_dialogue
-
+                if dialogue_on_complete == "START_HEAT_DRAIN":
+                    activate_heat_drain()
+                dialogue_on_complete = None
 
 def handle_desert_movement():
     """
@@ -322,8 +344,8 @@ def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
     surroundings, the decoy flower, the sprite companion (once she's
-    appeared), the protagonist at their current position, and a fading
-    movement-control hint if it's still active.
+    appeared), the protagonist, a fading movement-control hint, and the
+    HP bar (once the heat has started draining it).
     """
     screen.fill(DESERT_BG)
 
@@ -343,8 +365,8 @@ def draw_desert_room():
     pygame.draw.rect(screen, WHITE, protagonist_rect)
 
     draw_sprite_character()
-
     draw_control_hint()
+    draw_hp_bar()
 
 
 def draw_control_hint():
@@ -515,7 +537,8 @@ def check_decoy_flower_trigger():
     """
     global decoy_flower_encountered, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue, game_state
-    global dialogue_backdrop_state, sprite_character_visible
+    global dialogue_backdrop_state, dialogue_on_complete
+    global sprite_state, sprite_entrance_start_time
 
     if decoy_flower_encountered:
         return
@@ -532,21 +555,104 @@ def check_decoy_flower_trigger():
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
         dialogue_backdrop_state = "DESERT_ROOM"
-        sprite_character_visible = True  # She's now made her entrance
+        dialogue_on_complete = "START_HEAT_DRAIN"
+        sprite_state = "ENTERING"
+        sprite_entrance_start_time = pygame.time.get_ticks()
         game_state = "DIALOGUE"
 
 def draw_sprite_character():
     """
-    Draw a placeholder for the sprite companion: a small glowing circle
-    that hovers near the protagonist. This is a skeleton stand-in until
-    real sprite artwork and movement/animation are added.
+    Draw the sprite companion at her current animated position (see
+    update_sprite_animation), once she's made her first appearance.
     """
-    if not sprite_character_visible:
+    if sprite_state == "HIDDEN":
+        return
+    pygame.draw.circle(
+        screen,
+        SPRITE_CHAR_COLOR,
+        (int(sprite_draw_pos[0]), int(sprite_draw_pos[1])),
+        SPRITE_CHAR_RADIUS,
+    )
+
+def activate_heat_drain():
+    """
+    Turn on the desert heat's HP drain and reset its internal timer. Called
+    once the sprite's warning dialogue finishes.
+    """
+    global heat_drain_active, last_hp_tick_time
+    heat_drain_active = True
+    last_hp_tick_time = pygame.time.get_ticks()
+
+
+def update_heat_drain():
+    """
+    Drain the protagonist's HP by 1 point per second while heat_drain_active
+    is True, simulating the desert heat's ongoing effect until it's cured.
+    HP is floored at 0.
+    """
+    global hp, last_hp_tick_time
+
+    if not heat_drain_active or hp <= 0:
         return
 
-    sprite_x = protagonist["x"] + SPRITE_CHAR_OFFSET[0]
-    sprite_y = protagonist["y"] + SPRITE_CHAR_OFFSET[1]
-    pygame.draw.circle(screen, SPRITE_CHAR_COLOR, (sprite_x, sprite_y), SPRITE_CHAR_RADIUS)
+    current_time = pygame.time.get_ticks()
+    if current_time - last_hp_tick_time >= HP_DRAIN_INTERVAL:
+        hp -= 1
+        last_hp_tick_time = current_time
+
+
+def draw_hp_bar():
+    """
+    Draw the protagonist's HP bar in the top-left corner: a red fill
+    proportional to current HP over MAX_HP, with a numeric readout below
+    it. Only shown once the heat has started draining HP.
+    """
+    if not heat_drain_active:
+        return
+
+    x, y = HP_BAR_POS
+    pygame.draw.rect(screen, (80, 0, 0), (x, y, HP_BAR_WIDTH, HP_BAR_HEIGHT))
+
+    filled_width = int(HP_BAR_WIDTH * (hp / MAX_HP))
+    pygame.draw.rect(screen, (200, 30, 30), (x, y, filled_width, HP_BAR_HEIGHT))
+
+    pygame.draw.rect(screen, WHITE, (x, y, HP_BAR_WIDTH, HP_BAR_HEIGHT), 2)
+
+    hp_text_surface = hint_font.render(f"HP: {hp}/{MAX_HP}", True, WHITE)
+    hp_text_rect = hp_text_surface.get_rect(topleft=(x, y + HP_BAR_HEIGHT + 4))
+    screen.blit(hp_text_surface, hp_text_rect)
+
+def update_sprite_animation():
+    """
+    Update the sprite companion's on-screen position: fly in from above
+    the screen when she first appears, then settle into a gentle
+    up-and-down hover near the protagonist, like a bird flying on the spot.
+    """
+    global sprite_state, sprite_draw_pos
+
+    if sprite_state == "HIDDEN":
+        return
+
+    target_x = protagonist["x"] + SPRITE_CHAR_OFFSET[0]
+    target_y = protagonist["y"] + SPRITE_CHAR_OFFSET[1]
+
+    if sprite_state == "ENTERING":
+        elapsed = pygame.time.get_ticks() - sprite_entrance_start_time
+        progress = min(1.0, elapsed / SPRITE_ENTRANCE_DURATION)
+
+        sprite_draw_pos[0] = target_x
+        sprite_draw_pos[1] = SPRITE_ENTRANCE_START_Y + (target_y - SPRITE_ENTRANCE_START_Y) * progress
+
+        if progress >= 1.0:
+            sprite_state = "HOVERING"
+
+    elif sprite_state == "HOVERING":
+        bob_angle = (pygame.time.get_ticks() % SPRITE_HOVER_PERIOD) / SPRITE_HOVER_PERIOD * 2 * math.pi
+        bob_offset = math.sin(bob_angle) * SPRITE_HOVER_AMPLITUDE
+
+        sprite_draw_pos[0] = target_x
+        sprite_draw_pos[1] = target_y + bob_offset
+
 
 running = True
 while running:
@@ -570,6 +676,12 @@ while running:
         handle_desert_movement()
         check_decoy_flower_trigger()
 
+    # The heat drain and sprite animation keep running in real time once
+    # active, but not while the game is paused or on a placeholder screen.
+    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
+        update_heat_drain()
+        update_sprite_animation()
+
     # Detect the exact frame the player arrives in the desert room, so the
     # control hint's fade timer starts from the correct moment.
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
@@ -581,7 +693,7 @@ while running:
     elif game_state == "DIALOGUE":
         update_text_reveal()
         if dialogue_backdrop_state == "DESERT_ROOM":
-            draw_desert_room()  # Keep the desert scene visible behind the dialogue box
+            draw_desert_room()
         else:
             screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
