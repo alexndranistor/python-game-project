@@ -109,6 +109,12 @@ DECOY_FLOWER_RADIUS = 50
 DECOY_FLOWER_COLOR = (180, 160, 90)
 decoy_flower_encountered = False
 
+# --- Adding a glow to the decoy flower as well ---------------------------
+DECOY_FLOWER_GLOW_COLOR = (255, 230, 150)   # Warm, inviting gold 
+DECOY_FLOWER_GLOW_MIN_RADIUS = 18
+DECOY_FLOWER_GLOW_MAX_RADIUS = 26
+DECOY_FLOWER_GLOW_PERIOD = 900               # Milliseconds for one full pulse in and out
+
 ICE_FLOWER_POS = (100, 300)           # Far to the left, in the newly scrollable part of the desert
 ICE_FLOWER_COLOR = (180, 220, 240)     # Pale icy blue, distinct from the decoy flower
 
@@ -377,6 +383,7 @@ def draw_desert_room():
         line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
         screen.blit(line_surface, line_rect)
 
+    draw_decoy_flower_glow()
     draw_decoy_flower()
 
     if ice_flower_encountered:
@@ -753,6 +760,27 @@ def draw_ice_flower_glow():
     screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
     glow_rect = glow_surface.get_rect(center=(int(screen_x), int(screen_y)))
     screen.blit(glow_surface, glow_rect)
+
+def draw_decoy_flower_glow():
+    """
+    Draw a soft, pulsing glow around the decoy flower, visible from the
+    very start, to entice the player into walking toward it before the
+    sprite ever shows up to stop them.
+    """
+    pulse_progress = (pygame.time.get_ticks() % DECOY_FLOWER_GLOW_PERIOD) / DECOY_FLOWER_GLOW_PERIOD
+    pulse = math.sin(pulse_progress * 2 * math.pi)  # Oscillates between -1 and 1
+    radius = int(
+        DECOY_FLOWER_GLOW_MIN_RADIUS
+        + (pulse + 1) / 2 * (DECOY_FLOWER_GLOW_MAX_RADIUS - DECOY_FLOWER_GLOW_MIN_RADIUS)
+    )
+
+    glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surface, (*DECOY_FLOWER_GLOW_COLOR, 90), (radius, radius), radius)
+
+    screen_x, screen_y = world_to_screen(*DECOY_FLOWER_POS)
+    glow_rect = glow_surface.get_rect(center=(int(screen_x), int(screen_y)))
+    screen.blit(glow_surface, glow_rect)
+
 
 
 
