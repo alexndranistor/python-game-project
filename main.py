@@ -9,45 +9,46 @@ decide what to draw and which inputs to listen for each frame.
 
 import pygame
 import sys
+import math
 
 pygame.init()
 
-# --- Display setup ----------------------------------------------------
+# --- Display setup
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("My Game")
 clock = pygame.time.Clock()
 
-# --- Desert control hint (fades out after appearing) --------------------
+# --- Desert control hint (fades out after appearing) 
 previous_game_state = None       # Tracks the last frame's game_state, to detect state changes
 desert_hint_start_time = 0       # Timestamp (ms) the player entered the desert room
 HINT_VISIBLE_DURATION = 2000     # How long the control hint stays fully visible (ms)
-HINT_FADE_DURATION = 1000        # How long it takes to fade out after that (ms)
+HINT_FADE_DURATION = 2000        # How long it takes to fade out after that (ms)
 
-# --- Colours (RGB tuples) ----------------------------------------------
+# --- Colours (RGB tuples) 
 BARREN_BG = (120, 100, 70)
 WHITE = (255, 255, 255)
 HIGHLIGHT = (255, 215, 0)
 BLACK = (0, 0, 0)
 DESERT_BG = (194, 178, 128)
 
-# --- Fonts ---------------------------------------------------------------
+# --- Fonts 
 title_font = pygame.font.SysFont(None, 64)
 menu_font = pygame.font.SysFont(None, 40)
 dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
-# --- Core state machine ----------------------------------------------------
+# --- Core state machine 
 # Valid values so far: "TITLE", "DIALOGUE", "DESERT_ROOM" , "PAUSED", "SETTINGS_PLACEHOLDER"
 game_state = "TITLE"
 
-# --- Title screen menu state -------------------------------------------------
+# --- Title screen menu state 
 selected_option = 0
 menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
-# --- Player data -------------------------------------------------------------
+# --- Player data 
 PROTAGONIST_SIZE = 40   # Width/height in pixels of the protagonist's placeholder square
 PLAYER_SPEED = 4         # Pixels moved per frame while a direction key is held
 
@@ -97,12 +98,28 @@ next_state_after_dialogue = "DESERT_ROOM"
 # --- Desert biome placeholder text -------------------------------------------------
 DESERT_ROOM_DESCRIPTION = (
     "The heat is immediate and overwhelming. Sand stretches in every "
-    "direction, broken only by the occasional withered, thirsty-looking plant."
+    "direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere."
 )
+
+# --- Decoy flower (desert opening) ----------------------------------
+DECOY_FLOWER_POS = (600, 300)
+DECOY_FLOWER_RADIUS = 50            # Distance (pixels) at which the sprite steps in
+DECOY_FLOWER_COLOR = (180, 160, 90)  # Dull colour for a "common" flower
+decoy_flower_encountered = False    # Ensures the sprite's warning only fires once
+
+SPRITE_FLOWER_WARNING_TEXT = [
+    "A tiny light darts out of nowhere and hovers right in front of you.",
+    "\"Wait, wait, WAIT - don't pick that!\"",
+    "\"It's just a common flower, it doesn't do anything. And with the world already this dried up, we need to let whatever can still grow, grow.\"",
+    "\"Oh - sorry, I should introduce myself. I'm Sprite. I'll be keeping you out of trouble from now on, apparently.\"",
+    "\"Anyway. If you want, I can show you how to deal with that heat that's been quietly cooking you this whole time.\"",
+]
+
+
 
 def draw_title_screen():
     """
-    Draw the title screen: the game's title text and the New Game / Quit
+    the game's title text and the New Game / Quit
     menu, highlighting whichever option is currently selected.
     """
     global menu_option_rects
@@ -123,7 +140,7 @@ def draw_title_screen():
 
 def activate_menu_option(option_name):
     """
-    Perform whatever should happen when a title-screen menu option is
+    Perform what should happen when a title screen menu option is
     chosen, whether by keyboard (Enter) or mouse click.
 
     Args:
@@ -134,7 +151,7 @@ def activate_menu_option(option_name):
 
     if option_name == "New Game":
         # Start the catastrophe intro. Once it finishes, drop straight
-        # into the desert biome (no separate sprite-intro screen anymore).
+        # into the desert biome (no separate sprite-intro screen
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
@@ -296,8 +313,8 @@ def handle_desert_movement():
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, the protagonist at their current position, and a
-    fading movement-control hint if it's still within its display window.
+    surroundings, the decoy flower, the protagonist at their current
+    position, and a fading movement-control hint if it's still active.
     """
     screen.fill(DESERT_BG)
 
@@ -309,6 +326,8 @@ def draw_desert_room():
         line_surface = dialogue_font.render(line, True, BLACK)
         line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
         screen.blit(line_surface, line_rect)
+
+    draw_decoy_flower()
 
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
     protagonist_rect.center = (protagonist["x"], protagonist["y"])
@@ -469,6 +488,38 @@ def handle_placeholder_input(event):
     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
         game_state = "PAUSED"
 
+def draw_decoy_flower():
+    """
+    Draw the desert's decoy flower: a plain, common-looking flower that
+    has no real use, placed to tempt the player into picking it before
+    the sprite stops them.
+    """
+    pygame.draw.circle(screen, DECOY_FLOWER_COLOR, DECOY_FLOWER_POS, 12)
+
+def check_decoy_flower_trigger():
+    """
+    Check whether the protagonist has walked close enough to the decoy
+    flower to trigger the sprite's warning dialogue. Only fires once per
+    playthrough, tracked via decoy_flower_encountered.
+    """
+    global decoy_flower_encountered, dialogue_lines, current_line_index
+    global revealed_chars, last_reveal_time, next_state_after_dialogue, game_state
+
+    if decoy_flower_encountered:
+        return
+
+    dx = protagonist["x"] - DECOY_FLOWER_POS[0]
+    dy = protagonist["y"] - DECOY_FLOWER_POS[1]
+    distance = math.hypot(dx, dy)
+
+    if distance <= DECOY_FLOWER_RADIUS:
+        decoy_flower_encountered = True
+        dialogue_lines = SPRITE_FLOWER_WARNING_TEXT
+        current_line_index = 0
+        revealed_chars = 0
+        last_reveal_time = pygame.time.get_ticks()
+        next_state_after_dialogue = "DESERT_ROOM"
+        game_state = "DIALOGUE"
 
 
 running = True
@@ -487,6 +538,12 @@ while running:
         elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
             handle_placeholder_input(event)
 
+    # Per-frame updates for the desert room: move first, then check
+    # whether that movement brought the player close to the decoy flower.
+    if game_state == "DESERT_ROOM":
+        handle_desert_movement()
+        check_decoy_flower_trigger()
+
     # Detect the exact frame the player arrives in the desert room, so the
     # control hint's fade timer starts from the correct moment.
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
@@ -501,7 +558,6 @@ while running:
         current_line = dialogue_lines[current_line_index]
         draw_text_box(current_line[:revealed_chars])
     elif game_state == "DESERT_ROOM":
-        handle_desert_movement()
         draw_desert_room()
     elif game_state == "PAUSED":
         draw_pause_menu()
@@ -512,8 +568,4 @@ while running:
     clock.tick(60)
 
 pygame.quit()
-
-
-
-
 
