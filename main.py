@@ -635,7 +635,7 @@ def check_decoy_flower_trigger():
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
         dialogue_backdrop_state = "DESERT_ROOM"
-        dialogue_on_complete = "START_HEAT_DRAIN"
+        dialogue_on_complete = None
         sprite_state = "ENTERING"
         sprite_entrance_start_time = pygame.time.get_ticks()
         game_state = "DIALOGUE"
@@ -654,10 +654,9 @@ def draw_sprite_character():
 def activate_heat_drain():
     """
     Turn on the desert heat's HP drain and reset its internal timer.
-    Called once the sprite's warning dialogue finishes. (The HP bar
-    itself is already visible by this point - see hp_bar_visible, which
-    turns on as soon as the desert room is first entered, in the main
-    loop.)
+    Called as soon as the player first enters the desert room (see the
+    main loop), so the heat starts affecting them right away rather
+    than waiting for the sprite's warning dialogue to finish.
     """
     global heat_drain_active, last_hp_tick_time
 
@@ -1041,11 +1040,35 @@ def show_hp_heal_popup(amount_healed):
     hp_heal_popup_text = f"+{amount_healed} HP"
     hp_heal_popup_start_time = pygame.time.get_ticks()
 
+def render_outlined_text(text, font, fill_color, outline_color, outline_width=2):
+    """
+    Renders text with a solid outline behind it, by drawing the outline
+    colour at a ring of offsets around the text and the fill colour on
+    top, dead centre. Used for the HP heal callout so it stays readable
+    against any background colour.
+    """
+    base_surface = font.render(text, True, fill_color)
+    outline_surface = pygame.Surface(
+        (base_surface.get_width() + outline_width * 2, base_surface.get_height() + outline_width * 2),
+        pygame.SRCALPHA,
+    )
+
+    for dx in range(-outline_width, outline_width + 1):
+        for dy in range(-outline_width, outline_width + 1):
+            if dx == 0 and dy == 0:
+                continue
+            outline_text = font.render(text, True, outline_color)
+            outline_surface.blit(outline_text, (outline_width + dx, outline_width + dy))
+
+    outline_surface.blit(base_surface, (outline_width, outline_width))
+    return outline_surface
+
+
 def draw_hp_heal_popup():
     """
-    Draws the floating "+80 HP" text just under the HP bar while it's
-    still within its display duration, then stops automatically once
-    that time has passed.
+    Draws the floating "+80 HP" text (green fill, black outline) just
+    above the sprite while it's still within its display duration, then
+    stops automatically once that time has passed.
     """
     if hp_heal_popup_text is None:
         return
@@ -1054,9 +1077,13 @@ def draw_hp_heal_popup():
     if elapsed > HP_HEAL_POPUP_DURATION_MS:
         return
 
-    bar_x, bar_y = HP_BAR_POS
-    popup_surface = hint_font.render(hp_heal_popup_text, True, pygame.Color(HP_HEAL_POPUP_COLOR))
-    popup_rect = popup_surface.get_rect(topleft=(bar_x, bar_y + HP_BAR_HEIGHT + 5))
+    popup_surface = render_outlined_text(
+        hp_heal_popup_text, hint_font, pygame.Color(HP_HEAL_POPUP_COLOR), BLACK
+    )
+    sprite_screen_x, sprite_screen_y = world_to_screen(sprite_draw_pos[0], sprite_draw_pos[1])
+    popup_rect = popup_surface.get_rect(
+        center=(int(sprite_screen_x), int(sprite_screen_y) - SPRITE_CHAR_RADIUS - 20)
+    )
     screen.blit(popup_surface, popup_rect)
 
 
@@ -1093,6 +1120,7 @@ while running:
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
         desert_hint_start_time = pygame.time.get_ticks()
         hp_bar_visible = True
+        activate_heat_drain()
     previous_game_state = game_state
 
     if game_state == "TITLE":
