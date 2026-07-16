@@ -83,9 +83,7 @@ CATASTROPHE_INTRO_TEXT = [
     "But a great catastrophe struck, and everything changed.",
     "You awaken to find the world forever different...",
 ]
-# Note: the sprite's real first-appearance dialogue will be added in the
-# next change, triggered by walking into the desert's decoy flower -
-# rather than shown automatically here.
+
 
 # --- Dialogue system state ---------------------------------------------------------
 dialogue_lines = []
@@ -137,6 +135,13 @@ SPRITE_FLOWER_WARNING_TEXT = [
     "\"Oh - sorry, I should introduce myself. I'm Sprite. I'll be keeping you out of trouble from now on, apparently.\"",
     "\"Anyway. If you want, I can show you how to deal with that heat that's been quietly cooking you this whole time.\"",
     "\"Quick - go left! There should be a flower that way that can help you.\"",
+    
+]
+
+DECOY_FLOWER_EATEN_TEXT = [
+    "The tiny light flickers, and her expression falls.",
+    "\"...I told you not to eat that.\"",
+    "\"I really thought you'd listen to me on this one.\"",
 ]
 
 # --- Sprite companion (placeholder appearance for now) -------------------
@@ -176,11 +181,16 @@ ice_flower_collected = False
 DESERT_WORLD_WIDTH = 1600  # The desert extends further than a single screen
 camera_x = 0                # How far the camera has scrolled from the world's left edge
 
+
+
 # --- Arrow directing player to go left ---------------------------------------------
 LEFT_ARROW_COLOR = (255, 221, 89)      # Bright gold, easy to spot against the desert
 LEFT_ARROW_FLASH_PERIOD = 500           # Milliseconds for one full on/off blink cycle
 LEFT_ARROW_CENTER = (80, 260)           # Screen position, above the dialogue box
 LEFT_ARROW_SIZE = 40
+
+sprite_friendship_level = 0  # How much the sprite likes/trusts the player so far
+decoy_flower_eaten = False   # Whether the player has already eaten the decoy flower or not
 
 def draw_title_screen():
     """
@@ -397,6 +407,9 @@ def draw_desert_room():
         screen.blit(line_surface, line_rect)
 
     draw_decoy_flower_glow()
+    if not decoy_flower_eaten:
+     draw_decoy_flower_glow()
+     draw_decoy_flower()
     draw_decoy_flower()
     if not ice_flower_collected:
         if ice_flower_encountered:
@@ -822,7 +835,13 @@ def draw_left_arrow_hint():
 
 def update_nearby_interactable():
     """
-    Checks proximity every frame and updates nearby_interactable.
+    Every frame, re-checks how close the protagonist currently is to each
+    interactable object in the desert room, and updates nearby_interactable
+    to whichever single one (if any) is currently in range. Runs
+    independently of the one-off dialogue triggers in
+    check_ice_flower_trigger() and check_decoy_flower_trigger(), so E
+    keeps working correctly every time the player is back in range.
+
     """
     global nearby_interactable
 
@@ -837,7 +856,7 @@ def update_nearby_interactable():
 
     if ice_flower_encountered and not ice_flower_collected and ice_distance <= ICE_FLOWER_TRIGGER_RADIUS:
         nearby_interactable = "ice_flower"
-    elif decoy_distance <= DECOY_FLOWER_RADIUS:
+    elif not decoy_flower_eaten and decoy_distance <= DECOY_FLOWER_RADIUS:
         nearby_interactable = "decoy_flower"
     else:
         nearby_interactable = None
@@ -862,10 +881,28 @@ def consume_ice_flower():
 
 def consume_decoy_flower():
     """
-    Placeholder decoy flower interaction.
+    Reaction to eating the decoy flower after being warned not to. Costs
+    the player one friendship point with the sprite (floored at 0) and
+    triggers her disappointed reaction dialogue. Only happens once.
     """
-    print("That flower doesn't seem to do anything...")
+    global decoy_flower_eaten, sprite_friendship_level
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
 
+    if decoy_flower_eaten:
+        return
+
+    decoy_flower_eaten = True
+    sprite_friendship_level = max(0, sprite_friendship_level - 1)
+
+    dialogue_lines = DECOY_FLOWER_EATEN_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
 
 def draw_interaction_hint():
     """
