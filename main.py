@@ -104,7 +104,9 @@ dialogue_backdrop_state = None  # Which scene (if any) to draw behind the dialog
 # --- Desert biome placeholder text -------------------------------------------------
 DESERT_ROOM_DESCRIPTION = (
     "The heat is immediate and overwhelming. Sand stretches in every "
-    "direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere."
+    "direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere. "
+    "This place is dangerous - keep an eye on your health, the heat is already starting to get to you. "
+    "Look around... there might be something nearby that can help."
 )
 
 # --- Decoy flower (desert opening) ----------------------------------
@@ -408,10 +410,12 @@ def handle_desert_movement():
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, the decoy flower, the ice flower placeholder (with its
-    attention-grabbing glow, hidden once collected), the sprite companion,
-    the protagonist, a "Press E" interaction hint, a fading
-    movement-control hint, and the HP bar.
+    surroundings, the decoy flower (hidden once eaten), the ice flower
+    placeholder (with its attention-grabbing glow, hidden once
+    collected), the sprite companion, the protagonist, a "Press E"
+    interaction hint, and a fading movement-control hint. The HP bar is
+    drawn separately by the main loop, since it needs to stay visible
+    across every game state, not just this one.
     """
     screen.fill(DESERT_BG)
 
@@ -423,11 +427,9 @@ def draw_desert_room():
         line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    draw_decoy_flower_glow()
     if not decoy_flower_eaten:
-     draw_decoy_flower_glow()
-     draw_decoy_flower()
-    draw_decoy_flower()
+        draw_decoy_flower_glow()
+        draw_decoy_flower()
     if not ice_flower_collected:
         if ice_flower_encountered:
             draw_ice_flower_glow()
@@ -441,7 +443,6 @@ def draw_desert_room():
 
     draw_sprite_character()
     draw_control_hint()
-    draw_hp_bar()
 
 def draw_control_hint():
     """
@@ -653,17 +654,15 @@ def draw_sprite_character():
 def activate_heat_drain():
     """
     Turn on the desert heat's HP drain and reset its internal timer.
-    Called once the sprite's warning dialogue finishes. Also flips on
-    hp_bar_visible, which (unlike heat_drain_active) never gets reset
-    back to False, so the HP bar stays on screen for the rest of the
-    game even after the drain later stops (once the ice flower is
-    eaten).
+    Called once the sprite's warning dialogue finishes. (The HP bar
+    itself is already visible by this point - see hp_bar_visible, which
+    turns on as soon as the desert room is first entered, in the main
+    loop.)
     """
-    global heat_drain_active, last_hp_tick_time, hp_bar_visible
+    global heat_drain_active, last_hp_tick_time
 
     heat_drain_active = True
     last_hp_tick_time = pygame.time.get_ticks()
-    hp_bar_visible = True
 
 
 
@@ -684,27 +683,6 @@ def update_heat_drain():
         hp -= 1
         last_hp_tick_time = current_time
 
-
-def draw_hp_bar():
-    """
-    Draw the protagonist's HP bar in the top-left corner: a red fill
-    proportional to current HP over MAX_HP, with a numeric readout below
-    it. Only shown once the heat has started draining HP.
-    """
-    if not heat_drain_active:
-        return
-
-    x, y = HP_BAR_POS
-    pygame.draw.rect(screen, (80, 0, 0), (x, y, HP_BAR_WIDTH, HP_BAR_HEIGHT))
-
-    filled_width = int(HP_BAR_WIDTH * (hp / MAX_HP))
-    pygame.draw.rect(screen, (200, 30, 30), (x, y, filled_width, HP_BAR_HEIGHT))
-
-    pygame.draw.rect(screen, WHITE, (x, y, HP_BAR_WIDTH, HP_BAR_HEIGHT), 2)
-
-    hp_text_surface = hint_font.render(f"HP: {hp}/{MAX_HP}", True, WHITE)
-    hp_text_rect = hp_text_surface.get_rect(topleft=(x, y + HP_BAR_HEIGHT + 4))
-    screen.blit(hp_text_surface, hp_text_rect)
 
 def update_sprite_animation():
     """
@@ -1032,35 +1010,14 @@ def get_hp_bar_color(current_hp):
     else:
         return HP_BAR_COLOR_LOW
 
-def show_hp_heal_popup(amount_healed):
-    """
-    Starts a short-lived floating "+<amount> HP" text callout, shown in
-    green near the HP bar to confirm a heal just happened.
-    """
-    global hp_heal_popup_text, hp_heal_popup_start_time
-
-    hp_heal_popup_text = f"+{amount_healed} HP"
-    hp_heal_popup_start_time = pygame.time.get_ticks()
-
-def get_hp_bar_color(current_hp):
-    """
-    Returns the hex color the HP bar should currently be drawn in, based
-    on fixed thresholds: green at 70+, orange from 30-69, and red below
-    30.
-    """
-    if current_hp >= 70:
-        return HP_BAR_COLOR_HIGH
-    elif current_hp >= 30:
-        return HP_BAR_COLOR_MID
-    else:
-        return HP_BAR_COLOR_LOW
-
 def draw_hp_bar():
     """
-    Draws the HP bar in the corner of the screen: a white outline plus a
-    fill proportional to current HP, colored using get_hp_bar_color().
-    Called every frame once hp_bar_visible is True, regardless of game
-    state, so it stays on screen for the rest of the game.
+    Draws the HP bar in the corner of the screen: a white outline, a
+    fill proportional to current HP colored using get_hp_bar_color()
+    (green/orange/red based on fixed thresholds), and a numeric
+    "HP: x/100" readout underneath. Called every frame once
+    hp_bar_visible is True, regardless of game state, so it stays on
+    screen for the rest of the game.
     """
     bar_x, bar_y = HP_BAR_POS
     outline_rect = pygame.Rect(bar_x, bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
@@ -1069,6 +1026,10 @@ def draw_hp_bar():
     fill_width = int(HP_BAR_WIDTH * (hp / MAX_HP))
     fill_rect = pygame.Rect(bar_x, bar_y, fill_width, HP_BAR_HEIGHT)
     pygame.draw.rect(screen, pygame.Color(get_hp_bar_color(hp)), fill_rect)
+
+    hp_text_surface = hint_font.render(f"HP: {hp}/{MAX_HP}", True, WHITE)
+    hp_text_rect = hp_text_surface.get_rect(topleft=(bar_x, bar_y + HP_BAR_HEIGHT + 4))
+    screen.blit(hp_text_surface, hp_text_rect)
 
 def show_hp_heal_popup(amount_healed):
     """
@@ -1131,6 +1092,7 @@ while running:
 
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
         desert_hint_start_time = pygame.time.get_ticks()
+        hp_bar_visible = True
     previous_game_state = game_state
 
     if game_state == "TITLE":
@@ -1155,8 +1117,8 @@ while running:
         draw_placeholder_screen()
 
     if hp_bar_visible:
-      draw_hp_bar()
-      draw_hp_heal_popup()
+        draw_hp_bar()
+        draw_hp_heal_popup()
 
     pygame.display.flip()
     clock.tick(60)
