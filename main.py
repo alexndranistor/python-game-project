@@ -54,7 +54,7 @@ PLAYER_SPEED = 4         # Pixels moved per frame while a direction key is held
 
 protagonist = {
     "name": "Protagonist",
-    "x": SCREEN_WIDTH // 2,
+    "x": 1200,  # Positioned within the wider desert world, not just the screen!!
     "y": SCREEN_HEIGHT // 2,
 }
 
@@ -104,10 +104,13 @@ DESERT_ROOM_DESCRIPTION = (
 )
 
 # --- Decoy flower (desert opening) ----------------------------------
-DECOY_FLOWER_POS = (600, 300)
-DECOY_FLOWER_RADIUS = 50            # Distance (pixels) at which the sprite steps in
-DECOY_FLOWER_COLOR = (180, 160, 90)  # Dull colour for a "common" flower
-decoy_flower_encountered = False    # Ensures the sprite's warning only fires once
+DECOY_FLOWER_POS = (1400, 300)          # Shifted to match the protagonist's new spawn point
+DECOY_FLOWER_RADIUS = 50
+DECOY_FLOWER_COLOR = (180, 160, 90)
+decoy_flower_encountered = False
+
+ICE_FLOWER_POS = (100, 300)           # Far to the left, in the newly scrollable part of the desert
+ICE_FLOWER_COLOR = (180, 220, 240)     # Pale icy blue, distinct from the decoy flower
 
 SPRITE_FLOWER_WARNING_TEXT = [
     "A tiny light darts out of nowhere and hovers right in front of you.",
@@ -115,6 +118,7 @@ SPRITE_FLOWER_WARNING_TEXT = [
     "\"It's just a common flower, it doesn't do anything. And with the world already this dried up, we need to let whatever can still grow, grow.\"",
     "\"Oh - sorry, I should introduce myself. I'm Sprite. I'll be keeping you out of trouble from now on, apparently.\"",
     "\"Anyway. If you want, I can show you how to deal with that heat that's been quietly cooking you this whole time.\"",
+    "\"Quick - go left! There should be a flower that way that can help you.\"",
 ]
 
 # --- Sprite companion (placeholder appearance for now) -------------------
@@ -143,6 +147,9 @@ HP_BAR_HEIGHT = 20
 
 dialogue_on_complete = None  
 
+# --- Desert world & camera scrolling --------------------------------------
+DESERT_WORLD_WIDTH = 1600  # The desert extends further than a single screen
+camera_x = 0                # How far the camera has scrolled from the world's left edge
 
 def draw_title_screen():
     """
@@ -322,10 +329,10 @@ def handle_dialogue_input(event):
 def handle_desert_movement():
     """
     Update the protagonist's position based on which movement keys are
-    currently held down (arrow keys or WASD), keeping them fully on-screen.
+    currently held down (arrow keys or WASD), keeping them within the
+    bounds of the wider desert world (not just the visible screen).
     """
     keys = pygame.key.get_pressed()
-
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         protagonist["x"] -= PLAYER_SPEED
     if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -336,16 +343,17 @@ def handle_desert_movement():
         protagonist["y"] += PLAYER_SPEED
 
     half_size = PROTAGONIST_SIZE // 2
-    protagonist["x"] = max(half_size, min(SCREEN_WIDTH - half_size, protagonist["x"]))
+    protagonist["x"] = max(half_size, min(DESERT_WORLD_WIDTH - half_size, protagonist["x"]))
     protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
 
 
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, the decoy flower, the sprite companion (once she's
-    appeared), the protagonist, a fading movement-control hint, and the
-    HP bar (once the heat has started draining it).
+    surroundings, the decoy flower placeholder, the ice flower placeholder, the sprite
+    companion, the protagonist, a fading movement-control hint, and the
+    HP bar. The flowers, sprite, and protagonist are all positioned
+    relative to the current camera scroll offset.
     """
     screen.fill(DESERT_BG)
 
@@ -359,15 +367,16 @@ def draw_desert_room():
         screen.blit(line_surface, line_rect)
 
     draw_decoy_flower()
+    draw_ice_flower()
 
+    protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
-    protagonist_rect.center = (protagonist["x"], protagonist["y"])
+    protagonist_rect.center = (int(protagonist_screen_x), int(protagonist_screen_y))
     pygame.draw.rect(screen, WHITE, protagonist_rect)
 
     draw_sprite_character()
     draw_control_hint()
     draw_hp_bar()
-
 
 def draw_control_hint():
     """
@@ -523,11 +532,12 @@ def handle_placeholder_input(event):
 
 def draw_decoy_flower():
     """
-    Draw the desert's decoy flower: a plain, common-looking flower that
+    Draw the desert's decoy flower, a plain, common-looking flower that
     has no real use, placed to tempt the player into picking it before
     the sprite stops them.
     """
-    pygame.draw.circle(screen, DECOY_FLOWER_COLOR, DECOY_FLOWER_POS, 12)
+    screen_x, screen_y = world_to_screen(*DECOY_FLOWER_POS)
+    pygame.draw.circle(screen, DECOY_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
 
 def check_decoy_flower_trigger():
     """
@@ -563,16 +573,13 @@ def check_decoy_flower_trigger():
 def draw_sprite_character():
     """
     Draw the sprite companion at her current animated position (see
-    update_sprite_animation), once she's made her first appearance.
+    update_sprite_animation), converted from world to screen coordinates,
+    once she's made her first appearance.
     """
     if sprite_state == "HIDDEN":
         return
-    pygame.draw.circle(
-        screen,
-        SPRITE_CHAR_COLOR,
-        (int(sprite_draw_pos[0]), int(sprite_draw_pos[1])),
-        SPRITE_CHAR_RADIUS,
-    )
+    screen_x, screen_y = world_to_screen(sprite_draw_pos[0], sprite_draw_pos[1])
+    pygame.draw.circle(screen, SPRITE_CHAR_COLOR, (int(screen_x), int(screen_y)), SPRITE_CHAR_RADIUS)
 
 def activate_heat_drain():
     """
@@ -653,6 +660,35 @@ def update_sprite_animation():
         sprite_draw_pos[0] = target_x
         sprite_draw_pos[1] = target_y + bob_offset
 
+def world_to_screen(world_x, world_y):
+    """
+    Convert a position in world coordinates (used for gameplay logic,
+    e.g. distance checks) into screen coordinates (used for drawing),
+    by subtracting the camera's current horizontal scroll offset.
+    """
+    return world_x - camera_x, world_y
+
+
+def update_camera():
+    """
+    Keeping the camera roughly centred on the protagonist as they move
+    through the desert world, clamped so it never scrolls past either
+    edge of that world.
+    """
+    global camera_x
+    target_camera_x = protagonist["x"] - SCREEN_WIDTH // 2
+    camera_x = max(0, min(DESERT_WORLD_WIDTH - SCREEN_WIDTH, target_camera_x))
+
+
+def draw_ice_flower():
+    """
+    Draw a placeholder for the ice flower: a pale, icy-coloured circle
+    marking where the real ice flower (and its logic) will be built
+    in a future step.
+    """
+    screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
+    pygame.draw.circle(screen, ICE_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
+
 
 running = True
 while running:
@@ -670,20 +706,15 @@ while running:
         elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
             handle_placeholder_input(event)
 
-    # Per-frame updates for the desert room: move first, then check
-    # whether that movement brought the player close to the decoy flower.
     if game_state == "DESERT_ROOM":
         handle_desert_movement()
+        update_camera()
         check_decoy_flower_trigger()
 
-    # The heat drain and sprite animation keep running in real time once
-    # active, but not while the game is paused or on a placeholder screen.
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
         update_heat_drain()
         update_sprite_animation()
 
-    # Detect the exact frame the player arrives in the desert room, so the
-    # control hint's fade timer starts from the correct moment.
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
         desert_hint_start_time = pygame.time.get_ticks()
     previous_game_state = game_state
@@ -709,3 +740,4 @@ while running:
     clock.tick(60)
 
 pygame.quit()
+
