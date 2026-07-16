@@ -164,7 +164,7 @@ sprite_entrance_start_time = 0
 sprite_draw_pos = [0, 0]          # Current on-screen position, recalculated every frame
 
 
-# --- HP / heat drain system ------------------------------------------------
+# --- HP ------------------------------------------------
 MAX_HP = 100
 hp = MAX_HP
 heat_drain_active = False   # Becomes True once the sprite's warning dialogue finishes
@@ -173,6 +173,17 @@ HP_DRAIN_INTERVAL = 1000    # Milliseconds between each 1-point HP loss
 HP_BAR_POS = (20, 20)
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
+
+HP_BAR_COLOR_HIGH = "#2ECC71"    # Green - shown when HP is 70 or above
+HP_BAR_COLOR_MID = "#E67E22"     # Orange - shown when HP is between 30 and 69
+HP_BAR_COLOR_LOW = "#E74C3C"     # Red - shown when HP is below 30
+HP_HEAL_POPUP_COLOR = "#2ECC71"  # Green - the floating "+80 HP" text shown on heal
+
+hp_bar_visible = False   # Becomes True once heat drain first starts, and stays True for the rest of the game
+
+hp_heal_popup_text = None         # Text to show, e.g. "+80 HP"; None means nothing is showing
+hp_heal_popup_start_time = 0      # pygame.time.get_ticks() value from when it appeared
+HP_HEAL_POPUP_DURATION_MS = 1500  # How long the heal callout stays on screen, in milliseconds
 
 # --- For allowing sprite tutorial-ish intro.
 dialogue_on_complete = None  
@@ -641,12 +652,20 @@ def draw_sprite_character():
 
 def activate_heat_drain():
     """
-    Turn on the desert heat's HP drain and reset its internal timer. Called
-    once the sprite's warning dialogue finishes.
+    Turn on the desert heat's HP drain and reset its internal timer.
+    Called once the sprite's warning dialogue finishes. Also flips on
+    hp_bar_visible, which (unlike heat_drain_active) never gets reset
+    back to False, so the HP bar stays on screen for the rest of the
+    game even after the drain later stops (once the ice flower is
+    eaten).
     """
-    global heat_drain_active, last_hp_tick_time
+    global heat_drain_active, last_hp_tick_time, hp_bar_visible
+
     heat_drain_active = True
     last_hp_tick_time = pygame.time.get_ticks()
+    hp_bar_visible = True
+
+
 
 
 def update_heat_drain():
@@ -880,8 +899,8 @@ def handle_interaction_key():
 def consume_ice_flower():
     """
     Eating the ice flower restores 80 HP (capped at MAX_HP) and stops the
-    ongoing heat drain, then shows the item info popup explaining what
-    just happened.
+    ongoing heat drain, then shows the item info popup and a floating
+    "+80 HP" callout explaining what just happened.
     """
     global ice_flower_collected, hp, heat_drain_active
 
@@ -894,6 +913,8 @@ def consume_ice_flower():
         description="A pale, icy-cool flower. Eating it soothes the desert heat and restores 80 HP.",
         icon_path=None,
     )
+    show_hp_heal_popup(80)
+
 def consume_decoy_flower():
     """
     Reaction to eating the decoy flower after being warned not to. Costs
@@ -998,6 +1019,86 @@ def handle_item_popup_input(event):
     if key_pressed or mouse_clicked:
         game_state = previous_state_before_popup
 
+def get_hp_bar_color(current_hp):
+    """
+    Returns the hex color the HP bar should currently be drawn in, based
+    on fixed thresholds: green at 70+, orange from 30-69, and red below
+    30.
+    """
+    if current_hp >= 70:
+        return HP_BAR_COLOR_HIGH
+    elif current_hp >= 30:
+        return HP_BAR_COLOR_MID
+    else:
+        return HP_BAR_COLOR_LOW
+
+def show_hp_heal_popup(amount_healed):
+    """
+    Starts a short-lived floating "+<amount> HP" text callout, shown in
+    green near the HP bar to confirm a heal just happened.
+    """
+    global hp_heal_popup_text, hp_heal_popup_start_time
+
+    hp_heal_popup_text = f"+{amount_healed} HP"
+    hp_heal_popup_start_time = pygame.time.get_ticks()
+
+def get_hp_bar_color(current_hp):
+    """
+    Returns the hex color the HP bar should currently be drawn in, based
+    on fixed thresholds: green at 70+, orange from 30-69, and red below
+    30.
+    """
+    if current_hp >= 70:
+        return HP_BAR_COLOR_HIGH
+    elif current_hp >= 30:
+        return HP_BAR_COLOR_MID
+    else:
+        return HP_BAR_COLOR_LOW
+
+def draw_hp_bar():
+    """
+    Draws the HP bar in the corner of the screen: a white outline plus a
+    fill proportional to current HP, colored using get_hp_bar_color().
+    Called every frame once hp_bar_visible is True, regardless of game
+    state, so it stays on screen for the rest of the game.
+    """
+    bar_x, bar_y = HP_BAR_POS
+    outline_rect = pygame.Rect(bar_x, bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
+    pygame.draw.rect(screen, WHITE, outline_rect, 2)
+
+    fill_width = int(HP_BAR_WIDTH * (hp / MAX_HP))
+    fill_rect = pygame.Rect(bar_x, bar_y, fill_width, HP_BAR_HEIGHT)
+    pygame.draw.rect(screen, pygame.Color(get_hp_bar_color(hp)), fill_rect)
+
+def show_hp_heal_popup(amount_healed):
+    """
+    Starts a short-lived floating "+<amount> HP" text callout, shown in
+    green just under the HP bar to confirm a heal just happened.
+    """
+    global hp_heal_popup_text, hp_heal_popup_start_time
+
+    hp_heal_popup_text = f"+{amount_healed} HP"
+    hp_heal_popup_start_time = pygame.time.get_ticks()
+
+def draw_hp_heal_popup():
+    """
+    Draws the floating "+80 HP" text just under the HP bar while it's
+    still within its display duration, then stops automatically once
+    that time has passed.
+    """
+    if hp_heal_popup_text is None:
+        return
+
+    elapsed = pygame.time.get_ticks() - hp_heal_popup_start_time
+    if elapsed > HP_HEAL_POPUP_DURATION_MS:
+        return
+
+    bar_x, bar_y = HP_BAR_POS
+    popup_surface = hint_font.render(hp_heal_popup_text, True, pygame.Color(HP_HEAL_POPUP_COLOR))
+    popup_rect = popup_surface.get_rect(topleft=(bar_x, bar_y + HP_BAR_HEIGHT + 5))
+    screen.blit(popup_surface, popup_rect)
+
+
 
 running = True
 while running:
@@ -1053,7 +1154,12 @@ while running:
     elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
         draw_placeholder_screen()
 
+    if hp_bar_visible:
+      draw_hp_bar()
+      draw_hp_heal_popup()
+
     pygame.display.flip()
     clock.tick(60)
 
 pygame.quit()
+
