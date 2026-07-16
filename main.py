@@ -112,6 +112,18 @@ decoy_flower_encountered = False
 ICE_FLOWER_POS = (100, 300)           # Far to the left, in the newly scrollable part of the desert
 ICE_FLOWER_COLOR = (180, 220, 240)     # Pale icy blue, distinct from the decoy flower
 
+ICE_FLOWER_TRIGGER_RADIUS = 60        # How close the protagonist must get to be shown the hint
+ice_flower_encountered = False         # Whether the sprite has already pointed the flower out
+
+ICE_FLOWER_GLOW_COLOR = (200, 240, 255)
+ICE_FLOWER_GLOW_MIN_RADIUS = 18
+ICE_FLOWER_GLOW_MAX_RADIUS = 26
+ICE_FLOWER_GLOW_PERIOD = 900            # Milliseconds for one full pulse in and out
+
+ICE_FLOWER_HINT_TEXT = [
+    "\"Look - that one over there! Press E to pick it up!\"",
+]
+
 SPRITE_FLOWER_WARNING_TEXT = [
     "A tiny light darts out of nowhere and hovers right in front of you.",
     "\"Wait, wait, WAIT - don't pick that!\"",
@@ -350,10 +362,9 @@ def handle_desert_movement():
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
-    surroundings, the decoy flower placeholder, the ice flower placeholder, the sprite
-    companion, the protagonist, a fading movement-control hint, and the
-    HP bar. The flowers, sprite, and protagonist are all positioned
-    relative to the current camera scroll offset.
+    surroundings, the decoy flower, the ice flower placeholder (with its
+    attention-grabbing glow once found), the sprite companion, the
+    protagonist, a fading movement-control hint, and the HP bar.
     """
     screen.fill(DESERT_BG)
 
@@ -367,6 +378,9 @@ def draw_desert_room():
         screen.blit(line_surface, line_rect)
 
     draw_decoy_flower()
+
+    if ice_flower_encountered:
+        draw_ice_flower_glow()
     draw_ice_flower()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
@@ -689,6 +703,58 @@ def draw_ice_flower():
     screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
     pygame.draw.circle(screen, ICE_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
 
+def check_ice_flower_trigger():
+    """
+    Once the protagonist gets close enough to the ice flower, have the
+    sprite point it out (which also starts the glow, since that's drawn
+    conditionally on ice_flower_encountered). Only happens once.
+    """
+    global game_state, dialogue_lines, current_line_index, revealed_chars
+    global last_reveal_time, next_state_after_dialogue, dialogue_backdrop_state
+    global dialogue_on_complete, ice_flower_encountered
+
+    if ice_flower_encountered:
+        return
+
+    distance = math.hypot(
+        protagonist["x"] - ICE_FLOWER_POS[0],
+        protagonist["y"] - ICE_FLOWER_POS[1],
+    )
+    if distance <= ICE_FLOWER_TRIGGER_RADIUS:
+        ice_flower_encountered = True
+        dialogue_lines = ICE_FLOWER_HINT_TEXT
+        current_line_index = 0
+        revealed_chars = 0
+        last_reveal_time = pygame.time.get_ticks()
+        next_state_after_dialogue = "DESERT_ROOM"
+        dialogue_backdrop_state = "DESERT_ROOM"
+        dialogue_on_complete = None
+        game_state = "DIALOGUE"
+
+def draw_ice_flower_glow():
+    """
+    Draw a soft, pulsing glow around the ice flower to draw the player's
+    eye to it, once the sprite has pointed it out. The radius oscillates
+    smoothly between a min and max value using a sine wave, the same
+    technique used for the sprite's idle hover.
+    """
+    pulse_progress = (pygame.time.get_ticks() % ICE_FLOWER_GLOW_PERIOD) / ICE_FLOWER_GLOW_PERIOD
+    pulse = math.sin(pulse_progress * 2 * math.pi)  # Oscillates between -1 and 1
+    radius = int(
+        ICE_FLOWER_GLOW_MIN_RADIUS
+        + (pulse + 1) / 2 * (ICE_FLOWER_GLOW_MAX_RADIUS - ICE_FLOWER_GLOW_MIN_RADIUS)
+    )
+
+    # A separate surface with per-pixel alpha lets the glow be semi-transparent,
+    # which a plain pygame.draw.circle() straight onto the screen can't do.
+    glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surface, (*ICE_FLOWER_GLOW_COLOR, 90), (radius, radius), radius)
+
+    screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
+    glow_rect = glow_surface.get_rect(center=(int(screen_x), int(screen_y)))
+    screen.blit(glow_surface, glow_rect)
+
+
 
 running = True
 while running:
@@ -710,6 +776,7 @@ while running:
         handle_desert_movement()
         update_camera()
         check_decoy_flower_trigger()
+        check_ice_flower_trigger()
 
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
         update_heat_drain()
@@ -740,4 +807,5 @@ while running:
     clock.tick(60)
 
 pygame.quit()
+
 
