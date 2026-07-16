@@ -64,6 +64,12 @@ pause_selected_option = 0
 pause_option_rects = []
 paused_from_state = None  # Which gameplay state to return to when unpausing
 
+item_popup_title = ""               # Item name shown at the top of the popup
+item_popup_description = ""         # Short description/effect text shown inside the popup
+item_popup_icon_path = None         # Real icon image path later; None draws a placeholder square for now
+previous_state_before_popup = None  # Which state to return to once the popup closes
+ITEM_POPUP_ICON_SIZE = 64           # Width/height in pixels of the icon area inside the popup
+
 # --- Placeholder screens (Settings & Save aren't built yet) --------------
 PLACEHOLDER_SCREENS = {
     "SETTINGS_PLACEHOLDER": (
@@ -873,12 +879,21 @@ def handle_interaction_key():
 
 def consume_ice_flower():
     """
-    Placeholder ice flower pickup - popup/dialogue comes next.
+    Eating the ice flower restores 80 HP (capped at MAX_HP) and stops the
+    ongoing heat drain, then shows the item info popup explaining what
+    just happened.
     """
-    global ice_flower_collected
-    ice_flower_collected = True
-    print("Ate the ice flower! (popup + sprite dialogue comes next)")
+    global ice_flower_collected, hp, heat_drain_active
 
+    ice_flower_collected = True
+    hp = min(MAX_HP, hp + 80)
+    heat_drain_active = False
+
+    show_item_popup(
+        title="Ice Flower",
+        description="A pale, icy-cool flower. Eating it soothes the desert heat and restores 80 HP.",
+        icon_path=None,
+    )
 def consume_decoy_flower():
     """
     Reaction to eating the decoy flower after being warned not to. Costs
@@ -917,6 +932,72 @@ def draw_interaction_hint():
     hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_SIZE))
     screen.blit(hint_surface, hint_rect)
 
+def show_item_popup(title, description, icon_path=None):
+    """
+    Opens the small item-info popup window: a title, a short description,
+    and either a real icon image (once icon_path points to a real file)
+    or a placeholder square for now. Used for any item that should show
+    information the moment it's consumed, like the ice flower.
+    """
+    global item_popup_title, item_popup_description, item_popup_icon_path
+    global previous_state_before_popup, game_state
+
+    item_popup_title = title
+    item_popup_description = description
+    item_popup_icon_path = icon_path
+    previous_state_before_popup = "DESERT_ROOM"
+    game_state = "ITEM_POPUP"
+
+def draw_item_popup():
+    """
+    Draws the desert scene behind a centered popup box containing the
+    item's icon (a placeholder square until real art exists), title, and
+    wrapped description text, plus a hint to close it.
+    """
+    draw_desert_room()
+
+    box_rect = pygame.Rect(0, 0, 400, 220)
+    box_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+    pygame.draw.rect(screen, BLACK, box_rect)
+    pygame.draw.rect(screen, WHITE, box_rect, 3)
+
+    icon_rect = pygame.Rect(box_rect.x + 20, box_rect.y + 20, ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE)
+    if item_popup_icon_path is None:
+        pygame.draw.rect(screen, (150, 150, 150), icon_rect)  # Placeholder until real art exists
+    else:
+        icon_surface = pygame.image.load(item_popup_icon_path).convert_alpha()
+        icon_surface = pygame.transform.scale(icon_surface, (ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE))
+        screen.blit(icon_surface, icon_rect)
+
+    title_surface = dialogue_font.render(item_popup_title, True, WHITE)
+    title_rect = title_surface.get_rect(topleft=(icon_rect.right + 20, box_rect.y + 20))
+    screen.blit(title_surface, title_rect)
+
+    max_text_width = box_rect.width - 40
+    wrapped_lines = wrap_text(item_popup_description, hint_font, max_text_width)
+    line_height = hint_font.get_linesize()
+    for i, line in enumerate(wrapped_lines):
+        line_surface = hint_font.render(line, True, WHITE)
+        line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, icon_rect.bottom + 20 + i * line_height))
+        screen.blit(line_surface, line_rect)
+
+    hint_surface = hint_font.render("Press SPACE to close", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
+    screen.blit(hint_surface, hint_rect)
+
+def handle_item_popup_input(event):
+    """
+    Closes the item popup on Space/Enter or a mouse click, returning to
+    whichever state was active before it opened.
+    """
+    global game_state
+
+    key_pressed = event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE)
+    mouse_clicked = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+
+    if key_pressed or mouse_clicked:
+        game_state = previous_state_before_popup
+
 
 running = True
 while running:
@@ -929,19 +1010,21 @@ while running:
             handle_dialogue_input(event)
         elif game_state == "DESERT_ROOM":
             handle_desert_room_input(event)
+        elif game_state == "ITEM_POPUP":
+            handle_item_popup_input(event)
         elif game_state == "PAUSED":
             handle_pause_input(event)
         elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
             handle_placeholder_input(event)
 
     if game_state == "DESERT_ROOM":
-     handle_desert_movement()
-     update_camera()   
-     check_decoy_flower_trigger()
-     check_ice_flower_trigger()
-     update_nearby_interactable()
+        handle_desert_movement()
+        update_camera()
+        check_decoy_flower_trigger()
+        check_ice_flower_trigger()
+        update_nearby_interactable()
 
-    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
+    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP"):
         update_heat_drain()
         update_sprite_animation()
 
@@ -963,6 +1046,8 @@ while running:
         draw_text_box(current_line[:revealed_chars])
     elif game_state == "DESERT_ROOM":
         draw_desert_room()
+    elif game_state == "ITEM_POPUP":
+        draw_item_popup()
     elif game_state == "PAUSED":
         draw_pause_menu()
     elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
