@@ -95,6 +95,8 @@ text_reveal_speed = 30
 last_reveal_time = 0
 next_state_after_dialogue = "DESERT_ROOM"
 
+dialogue_backdrop_state = None  # Which scene (if any) to draw behind the dialogue box
+
 # --- Desert biome placeholder text -------------------------------------------------
 DESERT_ROOM_DESCRIPTION = (
     "The heat is immediate and overwhelming. Sand stretches in every "
@@ -140,7 +142,7 @@ def draw_title_screen():
 
 def activate_menu_option(option_name):
     """
-    Perform what should happen when a title screen menu option is
+    Perform whatever should happen when a title-screen menu option is
     chosen, whether by keyboard (Enter) or mouse click.
 
     Args:
@@ -148,15 +150,17 @@ def activate_menu_option(option_name):
     """
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
+    global dialogue_backdrop_state
 
     if option_name == "New Game":
         # Start the catastrophe intro. Once it finishes, drop straight
-        # into the desert biome (no separate sprite-intro screen
+        # into the desert biome (no separate sprite-intro screen anymore).
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
+        dialogue_backdrop_state = None  # No gameplay scene exists yet behind the intro
         game_state = "DIALOGUE"
     elif option_name == "Quit":
         pygame.quit()
@@ -340,7 +344,7 @@ def draw_control_hint():
     """
     Draw a temporary "Use ARROW KEYS or WASD to move" prompt near the
     bottom of the desert room, shown briefly when the player first
-    arrives and then fading out - similar to the on-screen control
+    arrives and then fading out, similar to the on-screen control
     reminders most games show when you enter a new area.
     """
     elapsed = pygame.time.get_ticks() - desert_hint_start_time
@@ -504,6 +508,7 @@ def check_decoy_flower_trigger():
     """
     global decoy_flower_encountered, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue, game_state
+    global dialogue_backdrop_state
 
     if decoy_flower_encountered:
         return
@@ -519,8 +524,8 @@ def check_decoy_flower_trigger():
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
+        dialogue_backdrop_state = "DESERT_ROOM"  # Keep the desert visible behind the dialogue
         game_state = "DIALOGUE"
-
 
 running = True
 while running:
@@ -554,7 +559,10 @@ while running:
         draw_title_screen()
     elif game_state == "DIALOGUE":
         update_text_reveal()
-        screen.fill(BARREN_BG)
+        if dialogue_backdrop_state == "DESERT_ROOM":
+            draw_desert_room()  # Keep the desert scene visible behind the dialogue box
+        else:
+            screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
         draw_text_box(current_line[:revealed_chars])
     elif game_state == "DESERT_ROOM":
@@ -568,4 +576,3 @@ while running:
     clock.tick(60)
 
 pygame.quit()
-
