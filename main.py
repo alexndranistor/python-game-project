@@ -163,7 +163,14 @@ HP_BAR_POS = (20, 20)
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
 
+# --- For allowing sprite tutorial-ish intro.
 dialogue_on_complete = None  
+
+# --- This is for making "press E to interact" work:
+nearby_interactable = None
+
+# --- To stop the ice flower from being collected more than once/remaining on screen once eaten.
+ice_flower_collected = False
 
 # --- Desert world & camera scrolling --------------------------------------
 DESERT_WORLD_WIDTH = 1600  # The desert extends further than a single screen
@@ -375,15 +382,15 @@ def draw_desert_room():
     """
     Draw the desert biome: a sandy background, a short description of the
     surroundings, the decoy flower, the ice flower placeholder (with its
-    attention-grabbing glow once found), the sprite companion, the
-    protagonist, a fading movement-control hint, and the HP bar.
+    attention-grabbing glow, hidden once collected), the sprite companion,
+    the protagonist, a "Press E" interaction hint, a fading
+    movement-control hint, and the HP bar.
     """
     screen.fill(DESERT_BG)
 
     max_text_width = SCREEN_WIDTH - 100
     wrapped_lines = wrap_text(DESERT_ROOM_DESCRIPTION, dialogue_font, max_text_width)
     line_height = dialogue_font.get_linesize()
-
     for i, line in enumerate(wrapped_lines):
         line_surface = dialogue_font.render(line, True, BLACK)
         line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
@@ -391,10 +398,11 @@ def draw_desert_room():
 
     draw_decoy_flower_glow()
     draw_decoy_flower()
-
-    if ice_flower_encountered:
-        draw_ice_flower_glow()
-    draw_ice_flower()
+    if not ice_flower_collected:
+        if ice_flower_encountered:
+            draw_ice_flower_glow()
+        draw_ice_flower()
+    draw_interaction_hint()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
@@ -445,6 +453,10 @@ def handle_desert_room_input(event):
         paused_from_state = "DESERT_ROOM"
         pause_selected_option = 0
         game_state = "PAUSED"
+    
+    elif event.type == pygame.KEYDOWN and event.key == pygame.K_e:
+        handle_interaction_key()
+        
 
 
 def draw_pause_menu():
@@ -808,6 +820,67 @@ def draw_left_arrow_hint():
     pygame.draw.polygon(screen, LEFT_ARROW_COLOR, arrow_points)
 
 
+def update_nearby_interactable():
+    """
+    Checks proximity every frame and updates nearby_interactable.
+    """
+    global nearby_interactable
+
+    ice_distance = math.hypot(
+        protagonist["x"] - ICE_FLOWER_POS[0],
+        protagonist["y"] - ICE_FLOWER_POS[1],
+    )
+    decoy_distance = math.hypot(
+        protagonist["x"] - DECOY_FLOWER_POS[0],
+        protagonist["y"] - DECOY_FLOWER_POS[1],
+    )
+
+    if ice_flower_encountered and not ice_flower_collected and ice_distance <= ICE_FLOWER_TRIGGER_RADIUS:
+        nearby_interactable = "ice_flower"
+    elif decoy_distance <= DECOY_FLOWER_RADIUS:
+        nearby_interactable = "decoy_flower"
+    else:
+        nearby_interactable = None
+
+
+def handle_interaction_key():
+    """
+    Runs whatever E should do, based on nearby_interactable.
+    """
+    if nearby_interactable == "ice_flower":
+        consume_ice_flower()
+    elif nearby_interactable == "decoy_flower":
+        consume_decoy_flower()
+
+def consume_ice_flower():
+    """
+    Placeholder ice flower pickup - popup/dialogue comes next.
+    """
+    global ice_flower_collected
+    ice_flower_collected = True
+    print("Ate the ice flower! (popup + sprite dialogue comes next)")
+
+def consume_decoy_flower():
+    """
+    Placeholder decoy flower interaction.
+    """
+    print("That flower doesn't seem to do anything...")
+
+
+def draw_interaction_hint():
+    """
+    Draws a 'Press E' prompt above the protagonist when something interactable is in range.
+    
+    """
+    if nearby_interactable is None:
+        return
+
+    screen_x, screen_y = world_to_screen(protagonist["x"], protagonist["y"])
+    hint_surface = hint_font.render("Press E", True, WHITE)
+    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_SIZE))
+    screen.blit(hint_surface, hint_rect)
+
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -825,10 +898,11 @@ while running:
             handle_placeholder_input(event)
 
     if game_state == "DESERT_ROOM":
-        handle_desert_movement()
-        update_camera()
-        check_decoy_flower_trigger()
-        check_ice_flower_trigger()
+     handle_desert_movement()
+     update_camera()   
+     check_decoy_flower_trigger()
+     check_ice_flower_trigger()
+     update_nearby_interactable()
 
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
         update_heat_drain()
