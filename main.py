@@ -101,13 +101,13 @@ next_state_after_dialogue = "DESERT_ROOM"
 
 dialogue_backdrop_state = None  # Which scene (if any) to draw behind the dialogue box
 
-# --- Desert biome placeholder text -------------------------------------------------
-DESERT_ROOM_DESCRIPTION = (
-    "The heat is immediate and overwhelming. Sand stretches in every "
-    "direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere. "
-    "This place is dangerous - keep an eye on your health, the heat is already starting to get to you. "
-    "Look around... there might be something nearby that can help."
-)
+# --- Desert biome opening dialogue -------------------------------------------------
+DESERT_INTRO_TEXT = [
+    "The heat is immediate and overwhelming.",
+    "Sand stretches in every direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere.",
+    "This place is dangerous - keep an eye on your health, the heat is already starting to get to you.",
+    "Look around... there might be something nearby that can help.",
+]
 
 # --- Decoy flower (desert opening) ----------------------------------
 DECOY_FLOWER_POS = (1400, 300)          # Shifted to match the protagonist's new spawn point
@@ -242,17 +242,19 @@ def activate_menu_option(option_name):
     """
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
-    global dialogue_backdrop_state
+    global dialogue_backdrop_state, dialogue_on_complete
 
     if option_name == "New Game":
-        # Start the catastrophe intro. Once it finishes, drop straight
-        # into the desert biome (no separate sprite-intro screen anymore).
+        # Start the catastrophe intro. Once it finishes, the desert's
+        # own opening dialogue plays next (see start_desert_intro_dialogue),
+        # and only after that does the player get free control.
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
         dialogue_backdrop_state = None  # No gameplay scene exists yet behind the intro
+        dialogue_on_complete = "START_DESERT_INTRO"
         game_state = "DIALOGUE"
     elif option_name == "Quit":
         pygame.quit()
@@ -364,6 +366,10 @@ def handle_dialogue_input(event):
     """
     Handle player input while a dialogue text box is active. Both
     pressing Enter/Space and left-clicking the mouse advance the dialogue.
+    On the final line, dialogue_on_complete decides what happens next: it
+    either chains straight into another dialogue (currently used to move
+    from the catastrophe intro into the desert's own opening dialogue),
+    or simply switches to next_state_after_dialogue as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -381,10 +387,32 @@ def handle_dialogue_input(event):
             current_line_index += 1
             revealed_chars = 0
             if current_line_index >= len(dialogue_lines):
-                game_state = next_state_after_dialogue
-                if dialogue_on_complete == "START_HEAT_DRAIN":
-                    activate_heat_drain()
-                dialogue_on_complete = None
+                if dialogue_on_complete == "START_DESERT_INTRO":
+                    dialogue_on_complete = None
+                    start_desert_intro_dialogue()
+                else:
+                    game_state = next_state_after_dialogue
+                    dialogue_on_complete = None
+
+
+def start_desert_intro_dialogue():
+    """
+    Kicks off the desert's own opening dialogue (DESERT_INTRO_TEXT), shown
+    as a normal dialogue box with the desert room drawn behind it. Runs
+    once, right after the catastrophe intro finishes; once the player
+    clicks/presses through to its last line ("Look around..."), the
+    dialogue box disappears and free movement begins as usual.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, game_state
+
+    dialogue_lines = DESERT_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    game_state = "DIALOGUE"
 
 def handle_desert_movement():
     """
@@ -409,23 +437,16 @@ def handle_desert_movement():
 
 def draw_desert_room():
     """
-    Draw the desert biome: a sandy background, a short description of the
-    surroundings, the decoy flower (hidden once eaten), the ice flower
-    placeholder (with its attention-grabbing glow, hidden once
-    collected), the sprite companion, the protagonist, a "Press E"
-    interaction hint, and a fading movement-control hint. The HP bar is
-    drawn separately by the main loop, since it needs to stay visible
-    across every game state, not just this one.
+    Draw the desert biome: a sandy background, the decoy flower (hidden
+    once eaten), the ice flower placeholder (with its attention-grabbing
+    glow, hidden once collected), the sprite companion, the protagonist,
+    a "Press E" interaction hint, and a fading movement-control hint.
+    The opening description now plays once as its own dialogue instead
+    of being drawn permanently here (see start_desert_intro_dialogue).
+    The HP bar is drawn separately by the main loop, since it needs to
+    stay visible across every game state, not just this one.
     """
     screen.fill(DESERT_BG)
-
-    max_text_width = SCREEN_WIDTH - 100
-    wrapped_lines = wrap_text(DESERT_ROOM_DESCRIPTION, dialogue_font, max_text_width)
-    line_height = dialogue_font.get_linesize()
-    for i, line in enumerate(wrapped_lines):
-        line_surface = dialogue_font.render(line, True, BLACK)
-        line_rect = line_surface.get_rect(topleft=(50, 50 + i * line_height))
-        screen.blit(line_surface, line_rect)
 
     if not decoy_flower_eaten:
         draw_decoy_flower_glow()
