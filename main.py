@@ -1129,10 +1129,17 @@ while running:
 
     if game_state == "DESERT_ROOM":
         handle_desert_movement()
-        update_camera()
         check_decoy_flower_trigger()
         check_ice_flower_trigger()
         update_nearby_interactable()
+
+    # Kept outside the DESERT_ROOM-only block above so the camera is
+    # already centred on the protagonist even while the desert scene is
+    # only being drawn as a dialogue backdrop (e.g. the desert's opening
+    # dialogue, or the sprite's warning) - otherwise it stayed at its
+    # initial value (the world's left edge) until DESERT_ROOM itself
+    # actually became the active game_state.
+    update_camera()
 
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP"):
         update_heat_drain()
