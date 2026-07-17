@@ -1,12 +1,10 @@
 """
 My Game - a narrative exploration game built with Pygame.
-
 This file contains the game so far: the title screen, the opening
 catastrophe dialogue, and the desert biome (with basic player movement).
 The game uses a simple state machine (the `game_state` global variable) to
 decide what to draw and which inputs to listen for each frame.
 """
-
 import pygame
 import sys
 import math
@@ -52,7 +50,6 @@ menu_option_rects = []
 # --- Player data
 PROTAGONIST_SIZE = 40
 PLAYER_SPEED = 4
-
 protagonist = {
     "name": "Protagonist",
     "x": 1200,
@@ -83,14 +80,12 @@ PLACEHOLDER_SCREENS = {
     ),
 }
 
-
 # --- Dialogue content ----------------------------------------------------------
 CATASTROPHE_INTRO_TEXT = [
     "Long ago, this land was full of life and wonder.",
     "But a great catastrophe struck, and everything changed.",
     "You awaken to find the world forever different...",
 ]
-
 
 # --- Dialogue system state ---------------------------------------------------------
 dialogue_lines = []
@@ -99,7 +94,6 @@ revealed_chars = 0
 text_reveal_speed = 30
 last_reveal_time = 0
 next_state_after_dialogue = "ROOM"
-
 dialogue_backdrop_state = None
 
 # --- Desert biome opening dialogue -------------------------------------------------
@@ -124,19 +118,15 @@ DECOY_FLOWER_GLOW_PERIOD = 900
 
 ICE_FLOWER_POS = (100, 300)
 ICE_FLOWER_COLOR = (180, 220, 240)
-
 ICE_FLOWER_TRIGGER_RADIUS = 60
 ice_flower_encountered = False
-
 ICE_FLOWER_GLOW_COLOR = (200, 240, 255)
 ICE_FLOWER_GLOW_MIN_RADIUS = 18
 ICE_FLOWER_GLOW_MAX_RADIUS = 26
 ICE_FLOWER_GLOW_PERIOD = 900
-
 ICE_FLOWER_HINT_TEXT = [
     "\"Look - that one over there! Press E to pick it up!\"",
 ]
-
 SPRITE_FLOWER_WARNING_TEXT = [
     "A tiny light darts out of nowhere and hovers right in front of you.",
     "\"Wait, wait, WAIT - don't pick that!\"",
@@ -144,9 +134,7 @@ SPRITE_FLOWER_WARNING_TEXT = [
     "\"Oh - sorry, I should introduce myself. I'm Sprite. I'll be keeping you out of trouble from now on, apparently.\"",
     "\"Anyway. If you want, I can show you how to deal with that heat that's been quietly cooking you this whole time.\"",
     "\"Quick - go left! There should be a flower that way that can help you.\"",
-    
 ]
-
 DECOY_FLOWER_EATEN_TEXT = [
     "The tiny light flickers, and her expression falls.",
     "\"...I told you not to eat that.\"",
@@ -161,11 +149,9 @@ SPRITE_ENTRANCE_DURATION = 700
 SPRITE_ENTRANCE_START_Y = -50
 SPRITE_HOVER_AMPLITUDE = 6
 SPRITE_HOVER_PERIOD = 1200
-
 sprite_state = "HIDDEN"
 sprite_entrance_start_time = 0
 sprite_draw_pos = [0, 0]
-
 
 # --- HP ------------------------------------------------
 MAX_HP = 100
@@ -177,14 +163,11 @@ HP_DRAIN_INTERVAL = 1000
 HP_BAR_POS = (20, 20)
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
-
 HP_BAR_COLOR_HIGH = "#2ECC71"
 HP_BAR_COLOR_MID = "#E67E22"
 HP_BAR_COLOR_LOW = "#E74C3C"
 HP_HEAL_POPUP_COLOR = "#2ECC71"
-
 hp_bar_visible = False
-
 hp_heal_popup_text = None
 hp_heal_popup_start_time = 0
 HP_HEAL_POPUP_DURATION_MS = 1500
@@ -205,7 +188,6 @@ camera_x = 0
 
 # --- Room system (background/world width driven by whichever room is active) ---
 current_room = "desert"
-
 ROOM_CONFIG = {
     "desert": {
         "bg_color": DESERT_BG,
@@ -216,8 +198,6 @@ ROOM_CONFIG = {
         "world_width": SWAMP_WORLD_WIDTH,
     },
 }
-
-
 
 # --- Arrow directing player to go left ---------------------------------------------
 LEFT_ARROW_COLOR = (255, 221, 89)
@@ -231,7 +211,6 @@ rat_friendship_level = 0
 
 # --- Sprite's true introduction (View 7) --------------------------------
 sprite_true_intro_played = False
-
 SPRITE_TRUE_INTRO_TEXT = [
     "\"See? All better now!\" She does a little spin in the air, clearly pleased with herself.",
     "\"That's lesson one: nature can heal just as easily as it can hurt you - if you actually bother to ask it properly.\"",
@@ -242,7 +221,6 @@ SPRITE_TRUE_INTRO_TEXT = [
     "\"So. Lucky you. I need actual hands, and you've apparently got magic to spare. Whether that's enough to be useful remains... to be seen.\"",
     "\"So? Are you in properly, or is this going to be a waste of both our time?\"",
 ]
-
 SPRITE_CHOICE_1_OPTIONS = [
     "I'm in. Whatever it takes to save this place.",
     "I'll try my best, I guess.",
@@ -254,13 +232,11 @@ SPRITE_CHOICE_1_REACTIONS = [
     "\"...I'll take it. Better than nothing, I suppose.\"",
     "\"...Did you not hear literally anything I just said? No hands. No body. That's rather the point.\" She sighs. \"Congratulations. You're stuck with the job anyway.\"",
 ]
-
 SPRITE_BETWEEN_CHOICES_TEXT = [
     "She's already back to business, tone brisk. \"Anyway. Since we're apparently doing this together now-\"",
     "\"-let me ask you something.\"",
     "\"If we're going to have any hope of putting the balance back together, I need to know you actually care about what we're fixing - not just about getting to the other side of it. So. Does any of this-\" she gestures at the withered dunes \"-actually mean something to you?\"",
 ]
-
 SPRITE_CHOICE_2_OPTIONS = [
     "It means everything. The balance of nature is what keeps a place like this alive.",
     "I don't understand it the way you do yet. But I want to.",
@@ -313,18 +289,14 @@ INGREDIENT_FLOWER_2_POS = (1020, 480)
 INGREDIENT_FLOWER_TRIGGER_RADIUS = 50
 INGREDIENT_FLOWER_WITHERED_COLOR = (150, 130, 90)
 INGREDIENT_FLOWER_BLOOMED_COLOR = (255, 140, 180)
-
 ingredient_flower_1_collected = False
 ingredient_flower_2_collected = False
-
 DECOY_WEED_POS = (860, 540)
 DECOY_WEED_TRIGGER_RADIUS = 50
 DECOY_WEED_COLOR = (120, 110, 70)
 decoy_weed_interacted = False
-
 INGREDIENT_WATERED_REACTION = "Sprite's light dips toward the flower, and it blooms back to life in an instant. One down!"
 DECOY_WEED_REACTION = "\"That one's just a common weed - no use to us. Keep looking.\""
-
 SWAMP_TRANSITION_TEXT = [
     "\"That's both ingredients - let's get this brewed before that fog gets any worse.\"",
     "A moment later, the potion's mixed and swallowed. The air already feels a little safer to breathe.",
@@ -335,7 +307,6 @@ SWAMP_TRANSITION_TEXT = [
 MAX_HEARTS = 3
 hearts = MAX_HEARTS
 checkpoint_state = "ROOM"  # Only one checkpoint exists so far (desert)
-
 GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 WIN_TEXT = "You've crossed the swamp safely, potion in hand. Floraborne's balance is one step closer to being restored."
 
@@ -359,7 +330,6 @@ SWAMP_INGREDIENT_FLOWER_2_POS = (600, 480)
 SWAMP_INGREDIENT_FLOWER_3_POS = (980, 220)
 SWAMP_INGREDIENT_WITHERED_COLOR = (90, 100, 70)
 SWAMP_INGREDIENT_BLOOMED_COLOR = (200, 150, 220)
-
 swamp_checklist_visible = False
 swamp_potion_brewed = False
 swamp_ingredient_flower_1_collected = False
@@ -375,11 +345,9 @@ SWAMP_HARMFUL_WEED_POS = (800, 400)
 SWAMP_HARMFUL_COLOR = (170, 40, 40)
 swamp_harmful_flower_eaten = False
 swamp_harmful_weed_eaten = False
-
 SWAMP_DECOY_WEED_POS = (150, 450)
 SWAMP_DECOY_WEED_COLOR = (80, 90, 60)
 swamp_decoy_weed_eaten = False
-
 SWAMP_HARMFUL_FLOWER_REACTION_DESC = (
     "A lurid, blistered bloom that looks almost too vivid to be safe - because "
     "it isn't. Eating it raw burns on the way down and costs you HP. Whatever "
@@ -405,7 +373,6 @@ SWAMP_ENTRY_TEXT = [
     "A checklist flickers into view - three flowers, all unticked.",
     "\"This swamp isn't going to make it easy, either. Some of what's growing out here isn't just useless - a few of them will actively hurt you if you're careless enough to eat them raw. Look properly before you go grabbing anything.\"",
 ]
-
 SWAMP_POTION_BREWED_TEXT = [
     "\"That's all three - let's get this potion mixed properly this time.\"",
     "A moment later, it's done: something for genuinely restoring balance, not just neutralizing poison.",
@@ -419,7 +386,6 @@ BRIDGE_TRIGGER_RADIUS = 60
 BRIDGE_BROKEN_COLOR = (60, 50, 45)
 BRIDGE_FIXED_COLOR = (150, 110, 70)
 swamp_bridge_fixed = False
-
 TINKER_ITEM_1_NAME = "Rusty Cog"
 TINKER_ITEM_2_NAME = "Vine-Bound Plank"
 TINKER_ITEM_1_POS = (1000, 200)
@@ -429,9 +395,7 @@ tinker_item_1_collected = False
 tinker_item_2_collected = False
 swamp_bridge_checklist_visible = False
 swamp_tinker_potion_brewed = False
-
 TINKER_ITEM_COLLECTED_REACTION = "Sprite scoops the piece up in a flicker of light and tucks it away. \"That's one - just need the other.\""
-
 BRIDGE_INTRO_TEXT = [
     "Sprite hovers toward the broken bridge ahead, her light dimming at the sight of it.",
     "\"That's... not going to hold anyone's weight like that. We need something to patch it up properly - a tinkering potion, this time, not another ingredient brew.\"",
@@ -439,13 +403,11 @@ BRIDGE_INTRO_TEXT = [
     "A checklist flickers into view - two scavenged parts, both unticked.",
     "\"Go on then. Two pieces should do it.\"",
 ]
-
 TINKER_POTION_BREWED_TEXT = [
     "\"That's both pieces - let's get this tinkering potion mixed.\"",
     "A moment later, it's done: something to hold rusted metal and old wood together like it was never broken.",
     "\"Now, let's go patch up that bridge.\"",
 ]
-
 BRIDGE_FIXED_TEXT = [
     "A few taps with the tinkering potion, and the planks knit themselves back together, solid as new.",
     "\"There - that ought to hold. Let's keep moving.\"",
@@ -458,22 +420,18 @@ RAT_TRIGGER_RADIUS = 60
 rat_encountered = False
 rat_resolved = False
 rat_outcome = None  # None, "died", "bitter", or "helped"
-
 RAT_FRIENDSHIP_LOW_THRESHOLD = 3   # at or below this -> lowest tier (he runs off and dies)
 RAT_FRIENDSHIP_HIGH_THRESHOLD = 8  # at or above this -> highest tier (healed and helping); between the two -> healed but bitter
-
 RAT_ENCOUNTER_TEXT = [
     "Past the bridge, huddled in the shadow of a fallen log, something small and hunched flinches at the sound of your footsteps.",
     "A rat - or what's left of one. Fur matted, one eye swollen shut, breathing shallow and ragged.",
     "\"...Go away.\" His voice is hoarse, more growl than word. \"Don't need help. Don't want it either.\"",
     "Sprite's light dims, hovering carefully at a distance. \"...He's in a bad way. But pushing straight in isn't going to get us anywhere. Try talking to him properly.\"",
 ]
-
 RAT_PRODDING_INTRO_TEXT = [
     "\"What happened to you?\" you ask, careful to keep your voice gentle.",
     "The rat's good eye narrows, suspicious. \"Why do you care.\" It isn't really a question.",
 ]
-
 RAT_CHOICE_1_OPTIONS = [
     "I just want to understand what happened to you.",
     "You look like you could use someone to talk to.",
@@ -485,13 +443,11 @@ RAT_CHOICE_1_REACTIONS = [
     "\"...Didn't ask for company.\" But he doesn't tell you to leave again, either. \"There was a den. A life, before. Guess that's gone now, same as everything else.\"",
     "\"...Fine.\" He curls tighter into himself and says nothing else, but doesn't stop you when you crouch down anyway.",
 ]
-
 RAT_BETWEEN_CHOICES_1_TEXT = [
     "\"I used to run the trade routes through this whole swamp,\" he mutters, almost to himself. \"Knew every safe path, every shortcut. Everyone came to me.\"",
     "\"Then the surge hit. Overnight the whole place turned to poison and mud, and everyone who used to need me just... left. Or didn't make it.\"",
     "\"Didn't have anywhere left to run trade to. So I stayed. Because someone had to know what this place used to be.\"",
 ]
-
 RAT_CHOICE_2_OPTIONS = [
     "That's not your fault. None of this was.",
     "That sounds really lonely.",
@@ -503,13 +459,11 @@ RAT_CHOICE_2_REACTIONS = [
     "\"...Lonely doesn't cover it.\" A pause. \"But you're not wrong, either.\"",
     "His good eye snaps back to you, sharp. \"You don't know anything about it.\" But he keeps talking anyway - like he needs to, even now.",
 ]
-
 RAT_BETWEEN_CHOICES_2_TEXT = [
     "\"Started hoarding, is what I did. Whatever herbs and roots still grew clean, I took for myself instead of sharing them out. Told myself it was just sense - survival.\"",
     "\"But there were others who needed that stuff worse than I did. Sick. Starving. Didn't matter to me at the time.\"",
     "\"By the time I actually looked around at what I'd done, there wasn't anyone left close enough to make it right with.\"",
 ]
-
 RAT_CHOICE_3_OPTIONS = [
     "Everyone deserves a chance to make things right.",
     "You can still do something about it now.",
@@ -521,13 +475,11 @@ RAT_CHOICE_3_REACTIONS = [
     "\"...Maybe.\" It's barely a whisper. \"Don't know where I'd even start.\"",
     "\"...Yeah.\" He looks away, and for a moment he looks smaller than the state he's already in. \"Yeah, guess I did.\"",
 ]
-
 RAT_BETWEEN_CHOICES_3_TEXT = [
     "Sprite drifts a little closer, quiet for once. \"For what it's worth - the balance potion we've been carrying was actually meant for this. For healing things this swamp broke.\"",
     "The rat's good eye flicks toward you, then away again. \"...You'd waste that. On me.\"",
     "\"That depends,\" you say, \"on whether you'll actually let us.\"",
 ]
-
 RAT_CHOICE_4_OPTIONS = [
     "We're not leaving until you let us help. Please.",
     "It's your choice. But we came all this way for you.",
@@ -539,20 +491,17 @@ RAT_CHOICE_4_REACTIONS = [
     "A long silence. Then, grudgingly: \"...Fine. Do what you're going to do.\"",
     "He flinches, curling away from you entirely. \"...Knew it. Knew you didn't actually mean it.\"",
 ]
-
 RAT_OUTCOME_DIED_TEXT = [
     "Before you can move, he's already scrambling backward, favouring his bad leg, refusing to look at you.",
     "\"...Don't. I mean it.\" And then he's gone, vanishing into the reeds before either of you can stop him.",
     "Sprite doesn't say anything for a long moment. \"...We should keep moving,\" she finally says, quieter than usual.",
 ]
-
 RAT_OUTCOME_BITTER_TEXT = [
     "He doesn't pull away this time. The balance potion does its work quickly - his breathing eases, the swelling in his eye already fading.",
     "\"...There.\" He gets shakily to his feet, testing his own weight like he doesn't quite trust it. \"Healed. Happy now?\"",
     "\"Don't expect me to come along, though.\" He won't quite meet your eyes. \"Healed's not the same as forgiven. Not from where I'm standing.\"",
     "He limps off without another word, healed but no less alone than he was before.",
 ]
-
 RAT_OUTCOME_HELPED_TEXT = [
     "He doesn't pull away this time. The balance potion does its work quickly - his breathing eases, the swelling in his eye fading, his whole body finally unclenching.",
     "He gets to his feet, and for a long moment just... stands there, like he isn't sure what to do with the feeling.",
@@ -561,6 +510,52 @@ RAT_OUTCOME_HELPED_TEXT = [
     "\"...Let me come with you. Least I can do is help undo some of what I helped break.\"",
     "Sprite's light flares, warm and genuine. \"...Welcome aboard, then.\"",
 ]
+
+# --- Rat companion, swamp exit door & final battle endings (Commit 14) ---
+RAT_FOLLOW_OFFSET = (-35, -35)
+rat_state = "HIDDEN"  # "HIDDEN" or "FOLLOWING"
+rat_draw_pos = [0, 0]
+DOOR_POS = (1550, 300)
+DOOR_TRIGGER_RADIUS = 60
+DOOR_COLOR = (40, 35, 30)
+door_encountered = False
+SPRITE_FRIENDSHIP_HELP_THRESHOLD = 4  # sprite_friendship_level at or above this -> she helps in the final battle
+game_over_text_override = None
+FINAL_BATTLE_INTRO_TEXT = [
+    "Ahead, past where the mud finally turns to solid stone, a heavy door stands sealed into the ruins of an old wall.",
+    "Sprite's light flickers uneasily. \"...That's it, isn't it. Whatever's actually been keeping Floraborne broken.\"",
+    "Everything the Rat told you about this place comes back at once - something ancient, feeding on all this rot, sitting right behind that door.",
+    "\"We're not going to fix any of this from out here,\" Sprite says quietly. \"Whatever's through there, we go in and put a stop to it. Together, if we're doing this at all.\"",
+]
+ENDING_BOTH_HELP_TEXT = [
+    "Sprite's light flares bright, and beside her the Rat sets his jaw, falling into step without hesitation.",
+    "\"...Fine. All three of us, then,\" the Rat mutters. \"Let's see this thing off properly.\"",
+    "Together, the three of you push through the door - and whatever waited in the dark doesn't stand a chance against you working as one. The last of it dissolves, and the poison finally starts lifting from the whole swamp.",
+    "Balance settles back over Floraborne, slow and real - and the surge that took Sprite's and the Rat's human forms finally unwinds too.",
+    "They don't waste time deciding what comes next: a new apothecary, built together, right where it all started to heal. Somewhere between all that rebuilding, the two of them fall properly in love - and between the two of them, they teach you absolutely everything they know.",
+]
+ENDING_SPRITE_ONLY_TEXT = [
+    "Sprite's light steadies, resolute. \"...I'm coming. Wherever this goes.\"",
+    "The Rat only watches from a distance, and doesn't follow.",
+    "Together, you and Sprite push through the door - and between her knowledge and your own resolve, it's enough. Whatever waited in the dark finally goes still.",
+    "Floraborne's balance settles back into place, and your journey with Sprite carries on from here.",
+    "Somewhere along the way, though, quiet whispers reach you both about the Rat - about a sad, lonely ending that never got the chance to be anything else.",
+]
+ENDING_RAT_ONLY_TEXT = [
+    "The Rat steps forward without a word, jaw set. Sprite's light dims, hanging back. \"...I'm sorry. I can't.\"",
+    "So it's just the two of you who push through the door.",
+    "Without Sprite's expertise, restoring the balance costs you more than you expected - somewhere in the fight, the same magic that twisted the Rat once catches up to you too.",
+    "By the time it's over, Floraborne's balance is restored - and you're a rat, same as him.",
+    "\"...Told you nature doesn't forgive carelessness,\" he mutters, though there's no real bite in it anymore. \"Guess you didn't learn a thing from my mistakes.\"",
+    "Still, you stay together after that - two rats, sharing whatever life is left to live in a slowly-healing Floraborne.",
+]
+ENDING_NEITHER_HELP_TEXT = [
+    "Neither Sprite nor the Rat move to follow you.",
+    "\"...I don't think I can,\" Sprite admits quietly. And the Rat says nothing at all.",
+    "You go in anyway, alone - and it isn't enough. Whatever's behind that door was always going to need more than potions.",
+    "It needed people who actually trusted each other. And by the time it matters, you never gave either of them a reason to.",
+]
+SELFISH_LOSS_TEXT = "Neither Sprite nor the Rat trusted you enough to help when it mattered. The potions alone were never going to be enough - not without people willing to stand with you."
 
 def draw_title_screen():
     """
@@ -786,6 +781,18 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "RAT_CHOICE_4":
                     dialogue_on_complete = None
                     start_rat_choice_4()
+                elif dialogue_on_complete == "START_RAT_FOLLOWING":
+                    dialogue_on_complete = None
+                    start_rat_following()
+                elif dialogue_on_complete == "RESOLVE_FINAL_BATTLE":
+                    dialogue_on_complete = None
+                    resolve_final_battle()
+                elif dialogue_on_complete == "ACTIVATE_WIN_ENDING":
+                    dialogue_on_complete = None
+                    activate_win_ending()
+                elif dialogue_on_complete == "ACTIVATE_SELFISH_LOSS":
+                    dialogue_on_complete = None
+                    activate_selfish_loss()
                 elif dialogue_on_complete == "RESOLVE_RAT_OUTCOME":
                     dialogue_on_complete = None
                     resolve_rat_outcome()
@@ -909,7 +916,10 @@ def draw_room():
     own one-off story elements. That's the desert's decoy flower, ice
     flower, and ingredient checklist puzzle, or the swamp's own
     3-ingredient puzzle, harmful decoys (Commit 11), bridge/tinker
-    items (Commit 12), and the Rat past the bridge (Commit 13).
+    items (Commit 12), the Rat past the bridge (Commit 13), and the
+    exit door once he's resolved (Commit 14). The Rat is drawn at his
+    fixed spot until he's a following companion, at which point
+    draw_rat_companion() takes over instead, alongside Sprite.
     """
     screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
@@ -920,7 +930,7 @@ def draw_room():
         if not ice_flower_collected:
             if ice_flower_encountered:
                 draw_ice_flower_glow()
-            draw_ice_flower()
+                draw_ice_flower()
         if checklist_visible:
             draw_ingredient_flowers()
     elif current_room == "swamp":
@@ -929,8 +939,10 @@ def draw_room():
         if swamp_bridge_checklist_visible:
             draw_tinker_items()
         draw_bridge()
-        if swamp_bridge_fixed:
+        if swamp_bridge_fixed and rat_state != "FOLLOWING":
             draw_rat()
+        if rat_resolved:
+            draw_door()
 
     draw_interaction_hint()
 
@@ -940,6 +952,8 @@ def draw_room():
     pygame.draw.rect(screen, WHITE, protagonist_rect)
 
     draw_sprite_character()
+    if rat_state == "FOLLOWING":
+        draw_rat_companion()
     draw_control_hint()
 
 def draw_control_hint():
@@ -1318,9 +1332,11 @@ def update_nearby_interactable():
     once its own checklist is visible (Commit 11). The two tinkering
     parts only become interactable once the bridge checklist is visible,
     the bridge itself only becomes interactable once the tinkering
-    potion is brewed and it isn't already fixed (Commit 12), and the Rat
+    potion is brewed and it isn't already fixed (Commit 12), the Rat
     only becomes interactable once the bridge is fixed and he hasn't been
-    encountered yet (Commit 13).
+    encountered yet (Commit 13), and the exit door only becomes
+    interactable once the Rat's encounter is resolved and the door
+    hasn't already been used (Commit 14).
     """
     global nearby_interactable
 
@@ -1397,6 +1413,10 @@ def update_nearby_interactable():
             protagonist["x"] - RAT_POS[0],
             protagonist["y"] - RAT_POS[1],
         )
+        door_distance = math.hypot(
+            protagonist["x"] - DOOR_POS[0],
+            protagonist["y"] - DOOR_POS[1],
+        )
 
         if swamp_checklist_visible and not swamp_ingredient_flower_1_collected and swamp_ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
             nearby_interactable = "swamp_ingredient_flower_1"
@@ -1418,6 +1438,8 @@ def update_nearby_interactable():
             nearby_interactable = "bridge"
         elif swamp_bridge_fixed and not rat_encountered and rat_distance <= RAT_TRIGGER_RADIUS:
             nearby_interactable = "rat"
+        elif rat_resolved and not door_encountered and door_distance <= DOOR_TRIGGER_RADIUS:
+            nearby_interactable = "door"
         else:
             nearby_interactable = None
 
@@ -1453,6 +1475,8 @@ def handle_interaction_key():
         repair_bridge()
     elif nearby_interactable == "rat":
         encounter_rat()
+    elif nearby_interactable == "door":
+        trigger_final_battle()
 
 def consume_ice_flower():
     """
@@ -2538,9 +2562,9 @@ def resolve_rat_outcome():
     the accumulated rat_friendship_level against the two thresholds and
     plays whichever of the three ending dialogues applies (he dies,
     he's healed but bitter, or he's healed and agrees to help), then
-    marks the encounter as fully resolved. This is the one moment that
-    decides the Rat's fate for the rest of the game, and it's what
-    Commit 14's branching endings will read to decide which ending plays.
+    marks the encounter as fully resolved. If he's agreed to help, this
+    also chains into start_rat_following() (Commit 14) once his line
+    finishes, so he joins as a following companion from that point on.
     """
     global rat_resolved, rat_outcome
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
@@ -2551,31 +2575,71 @@ def resolve_rat_outcome():
     if rat_friendship_level <= RAT_FRIENDSHIP_LOW_THRESHOLD:
         rat_outcome = "died"
         dialogue_lines = RAT_OUTCOME_DIED_TEXT
+        dialogue_on_complete = None
     elif rat_friendship_level < RAT_FRIENDSHIP_HIGH_THRESHOLD:
         rat_outcome = "bitter"
         dialogue_lines = RAT_OUTCOME_BITTER_TEXT
+        dialogue_on_complete = None
     else:
         rat_outcome = "helped"
         dialogue_lines = RAT_OUTCOME_HELPED_TEXT
+        dialogue_on_complete = "START_RAT_FOLLOWING"
 
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
     dialogue_backdrop_state = "ROOM"
-    dialogue_on_complete = None
     game_state = "DIALOGUE"
 
 
 def draw_rat():
     """
     Draws the Rat at his fixed position past the bridge, for as long as
-    his outcome isn't "died" - once he's run off, he's simply gone.
+    he hasn't left the scene for good - gone if he ran off ("died") or
+    limped away bitter after being healed ("bitter"). Once he's agreed
+    to help ("helped"), he becomes a following companion instead, drawn
+    by draw_rat_companion() (Commit 14).
     """
-    if rat_outcome == "died":
+    if rat_outcome in ("died", "bitter"):
         return
     screen_x, screen_y = world_to_screen(*RAT_POS)
     pygame.draw.circle(screen, RAT_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
+def draw_rat_companion():
+    """
+    Draws the Rat at his current follow position once he's agreed to
+    join as a companion (Commit 14), the same way draw_sprite_character()
+    draws Sprite.
+    """
+    screen_x, screen_y = world_to_screen(rat_draw_pos[0], rat_draw_pos[1])
+    pygame.draw.circle(screen, RAT_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
+def start_rat_following():
+    """
+    Called once the Rat's healed-and-helped outcome dialogue finishes:
+    switches him from his fixed spot into a following companion,
+    positioned right at the protagonist's side from that point on.
+    """
+    global rat_state, rat_draw_pos
+    rat_state = "FOLLOWING"
+    rat_draw_pos = [protagonist["x"] + RAT_FOLLOW_OFFSET[0], protagonist["y"] + RAT_FOLLOW_OFFSET[1]]
+
+
+def update_rat_companion_animation():
+    """
+    Keeps the Rat's on-screen position locked to his follow offset from
+    the protagonist, once he's joined as a companion. Simpler than
+    Sprite's own animation, since he walks alongside you rather than
+    hovering.
+    """
+    global rat_draw_pos
+    if rat_state != "FOLLOWING":
+        return
+    rat_draw_pos[0] = protagonist["x"] + RAT_FOLLOW_OFFSET[0]
+    rat_draw_pos[1] = protagonist["y"] + RAT_FOLLOW_OFFSET[1]
 
 
 def start_swamp_room():
@@ -2595,27 +2659,113 @@ def start_swamp_room():
     camera_x = 0
 
 
-def check_swamp_end_trigger():
+def draw_door():
     """
-    Once the protagonist reaches the far right edge of the swamp AND the
-    Rat encounter has been resolved (Commit 13), the game is won. Also
-    updates this session's win statistics: total wins, this run's time
-    taken, and the fastest win time seen so far.
+    Draws the swamp's exit door once the Rat's encounter is resolved
+    (Commit 14), marking the way toward the final confrontation.
+    """
+    screen_x, screen_y = world_to_screen(*DOOR_POS)
+    door_rect = pygame.Rect(0, 0, 30, 70)
+    door_rect.center = (int(screen_x), int(screen_y))
+    pygame.draw.rect(screen, DOOR_COLOR, door_rect)
+
+
+def trigger_final_battle():
+    """
+    Triggered the first time the player interacts with the door past
+    the Rat's resolved encounter: plays the door/final-battle intro
+    dialogue, then chains straight into resolving the ending based on
+    Sprite's and the Rat's willingness to help.
+    """
+    global door_encountered
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if door_encountered:
+        return
+
+    door_encountered = True
+
+    dialogue_lines = FINAL_BATTLE_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RESOLVE_FINAL_BATTLE"
+    game_state = "DIALOGUE"
+
+
+def resolve_final_battle():
+    """
+    Runs once the door's intro dialogue finishes: checks whether Sprite
+    (sprite_friendship_level at or above SPRITE_FRIENDSHIP_HELP_THRESHOLD)
+    and the Rat (rat_outcome == "helped") are willing to help with the
+    final confrontation, and plays whichever of the four ending
+    dialogues applies. Chains into either the win screen or a
+    narrative-specific game-over once that ending's text finishes.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    sprite_helps = sprite_friendship_level >= SPRITE_FRIENDSHIP_HELP_THRESHOLD
+    rat_helps = rat_outcome == "helped"
+
+    if sprite_helps and rat_helps:
+        dialogue_lines = ENDING_BOTH_HELP_TEXT
+        dialogue_on_complete = "ACTIVATE_WIN_ENDING"
+    elif sprite_helps:
+        dialogue_lines = ENDING_SPRITE_ONLY_TEXT
+        dialogue_on_complete = "ACTIVATE_WIN_ENDING"
+    elif rat_helps:
+        dialogue_lines = ENDING_RAT_ONLY_TEXT
+        dialogue_on_complete = "ACTIVATE_WIN_ENDING"
+    else:
+        dialogue_lines = ENDING_NEITHER_HELP_TEXT
+        dialogue_on_complete = "ACTIVATE_SELFISH_LOSS"
+
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    game_state = "DIALOGUE"
+
+
+def activate_win_ending():
+    """
+    Moves to the win screen once a successful ending's text finishes,
+    updating this session's win statistics the same way the old
+    swamp-edge trigger used to.
     """
     global game_state, total_wins, last_run_time_ms, fastest_win_time_ms
 
-    if protagonist["x"] >= SWAMP_WORLD_WIDTH - PROTAGONIST_SIZE and rat_resolved:
-        game_state = "WIN"
-        total_wins += 1
-        last_run_time_ms = pygame.time.get_ticks() - run_start_time
-        if fastest_win_time_ms is None or last_run_time_ms < fastest_win_time_ms:
-            fastest_win_time_ms = last_run_time_ms
+    game_state = "WIN"
+    total_wins += 1
+    last_run_time_ms = pygame.time.get_ticks() - run_start_time
+    if fastest_win_time_ms is None or last_run_time_ms < fastest_win_time_ms:
+        fastest_win_time_ms = last_run_time_ms
+
+
+def activate_selfish_loss():
+    """
+    Moves to the game-over screen for the "neither helped" ending,
+    swapping in the narrative-specific message via
+    game_over_text_override instead of the usual hearts-based one.
+    """
+    global game_state, game_over_text_override
+
+    game_over_text_override = SELFISH_LOSS_TEXT
+    game_state = "GAME_OVER"
 
 
 def draw_game_over_screen():
     """
-    Draws the full game-over screen shown once all 3 hearts are lost,
-    with the option to try again from the title screen.
+    Draws the full game-over screen shown either once all 3 hearts are
+    lost, or after the "neither helped" ending (Commit 14) - using
+    game_over_text_override for the latter instead of the usual
+    hearts-based message. Either way, offers the option to try again
+    from the title screen.
     """
     screen.fill((20, 20, 20))
 
@@ -2623,7 +2773,7 @@ def draw_game_over_screen():
     title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 220))
     screen.blit(title_surface, title_rect)
 
-    wrapped_lines = wrap_text(GAME_OVER_TEXT, dialogue_font, SCREEN_WIDTH - 100)
+    wrapped_lines = wrap_text(game_over_text_override or GAME_OVER_TEXT, dialogue_font, SCREEN_WIDTH - 100)
     line_height = dialogue_font.get_linesize()
     for i, line in enumerate(wrapped_lines):
         line_surface = dialogue_font.render(line, True, WHITE)
@@ -2639,12 +2789,12 @@ def reset_run_state():
     """
     Resets every run-specific counter and flag back to a fresh game's
     starting values, including the swamp's ingredient/decoy flags from
-    Commit 11, the bridge/tinkering flags added in Commit 12, and the
-    Rat's encounter flags added in Commit 13. Shared by the game-over
-    screen and the win screen, since both send the player back to the
-    title screen for a new attempt. Session statistics (games_played,
-    total_deaths, total_wins, fastest_win_time_ms) are deliberately left
-    untouched here.
+    Commit 11, the bridge/tinkering flags from Commit 12, the Rat's
+    encounter flags from Commit 13, and the Rat-companion/door/ending
+    flags from Commit 14. Shared by the game-over screen and the win
+    screen, since both send the player back to the title screen for a
+    new attempt. Session statistics (games_played, total_deaths,
+    total_wins, fastest_win_time_ms) are deliberately left untouched here.
     """
     global hearts, hp, sprite_friendship_level, rat_friendship_level
     global decoy_flower_eaten, ice_flower_collected, ice_flower_encountered
@@ -2658,6 +2808,7 @@ def reset_run_state():
     global tinker_item_1_collected, tinker_item_2_collected
     global hp_heal_popup_text, hp_damage_popup_text
     global rat_encountered, rat_resolved, rat_outcome
+    global rat_state, rat_draw_pos, door_encountered, game_over_text_override
 
     hearts = MAX_HEARTS
     hp = MAX_HP
@@ -2696,6 +2847,10 @@ def reset_run_state():
     rat_encountered = False
     rat_resolved = False
     rat_outcome = None
+    rat_state = "HIDDEN"
+    rat_draw_pos = [0, 0]
+    door_encountered = False
+    game_over_text_override = None
     protagonist["x"] = 1200
     protagonist["y"] = SCREEN_HEIGHT // 2
 
@@ -2788,8 +2943,6 @@ while running:
         if current_room == "desert":
             check_decoy_flower_trigger()
             check_ice_flower_trigger()
-        elif current_room == "swamp":
-            check_swamp_end_trigger()
 
     update_camera()
 
@@ -2798,6 +2951,7 @@ while running:
         if hp <= 0:
             handle_hp_depleted()
         update_sprite_animation()
+        update_rat_companion_animation()
         update_room_timer()
 
     if game_state == "ROOM" and previous_game_state != "ROOM":
