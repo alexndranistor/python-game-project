@@ -257,6 +257,17 @@ SPRITE_CHOICE_2_REACTIONS = [
     "\"Wow. Okay.\" A pause, stung. \"Remind me again why I'm bothering to help you?\"",
 ]
 
+# --- Potion recipe & checklist introduction (View 8) --------------------
+POTION_RECIPE_INTRO_TEXT = [
+    "\"Right, business time.\" She hovers upright, suddenly all business. \"Good news: there's a way out of this desert.\"",
+    "\"Bad news: it's a swamp now. Used to be the most beautiful lakes and rivers in all of Floraborne, before everything got ruined. These days it's just poison fog and mud, unless we're careful.\"",
+    "\"Lucky for you, I happen to know the recipe for an anti-poison potion that'll get us through it safely.\"",
+    "A small checklist flickers into the top-right corner of your vision - two flowers, both unticked.",
+    "\"There. Now you've got a list, and I've got approximately zero patience left for standing around. Go find the first one!\"",
+    "\"Oh - and if you spot any flowers out there looking half-dead, just walk up and interact with them. I've still got just enough magic left in me to water them myself. You don't have to do a thing, for once.\"",
+    "\"Go on, then. Sniff it out like the little magic bloodhound you apparently are.\"",
+]
+
 # --- Reusable dialogue-choice component ---------------------------------
 choice_options = []
 choice_deltas = []
@@ -431,6 +442,9 @@ def handle_dialogue_input(event):
     On the final line, dialogue_on_complete decides what happens next: it
     either chains straight into another dialogue, or simply switches to
     next_state_after_dialogue as normal.
+
+    Args:
+        event (pygame.event.Event): The event to process.
     """
     global current_line_index, revealed_chars, game_state, dialogue_on_complete
 
@@ -457,6 +471,13 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "SPRITE_CHOICE_2":
                     dialogue_on_complete = None
                     start_sprite_choice_2()
+                elif dialogue_on_complete == "START_POTION_RECIPE_INTRO":
+                    dialogue_on_complete = None
+                    start_potion_recipe_intro_dialogue()
+                elif dialogue_on_complete == "SHOW_INGREDIENT_CHECKLIST":
+                    dialogue_on_complete = None
+                    show_ingredient_checklist()
+                    game_state = next_state_after_dialogue
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -1186,8 +1207,8 @@ def start_sprite_choice_2():
     """
     Opens the second dialogue-choice moment of View 7 ("Does any of this
     actually mean something to you?"), feeding sprite_friendship_level.
-    Chains straight into View 8 once the reaction line finishes (not
-    wired up until Commit 5, so this is a no-op for now).
+    Chains straight into View 8 (the potion recipe/checklist intro) once
+    the reaction line finishes.
     """
     start_dialogue_choice(
         options=SPRITE_CHOICE_2_OPTIONS,
@@ -1196,6 +1217,26 @@ def start_sprite_choice_2():
         target="sprite",
         on_complete="START_POTION_RECIPE_INTRO",
     )
+
+
+def start_potion_recipe_intro_dialogue():
+    """
+    Plays View 8: Sprite introduces the anti-poison potion recipe and
+    the on-screen checklist. Once this dialogue finishes, the checklist
+    becomes visible and the 90-second room timer starts (see
+    show_ingredient_checklist, chained via dialogue_on_complete).
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = POTION_RECIPE_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = "SHOW_INGREDIENT_CHECKLIST"
+    game_state = "DIALOGUE"
 
 
 def start_dialogue_choice(options, deltas, reactions, target, on_complete):
