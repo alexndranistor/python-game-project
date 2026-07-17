@@ -277,6 +277,26 @@ ROOM_TIMER_DURATION_MS = 90000
 room_timer_active = False
 room_timer_start_time = 0
 
+# --- Ingredient flowers (View 8's checklist puzzle) ----------------------
+INGREDIENT_FLOWER_1_NAME = "Sunroot Bloom"
+INGREDIENT_FLOWER_2_NAME = "Cactus Blossom"
+INGREDIENT_FLOWER_1_POS = (700, 150)
+INGREDIENT_FLOWER_2_POS = (1020, 480)
+INGREDIENT_FLOWER_TRIGGER_RADIUS = 50
+INGREDIENT_FLOWER_WITHERED_COLOR = (150, 130, 90)
+INGREDIENT_FLOWER_BLOOMED_COLOR = (255, 140, 180)
+
+ingredient_flower_1_collected = False
+ingredient_flower_2_collected = False
+
+DECOY_WEED_POS = (860, 540)
+DECOY_WEED_TRIGGER_RADIUS = 50
+DECOY_WEED_COLOR = (120, 110, 70)
+decoy_weed_interacted = False
+
+INGREDIENT_WATERED_REACTION = "Sprite's light dips toward the flower, and it blooms back to life in an instant. One down!"
+DECOY_WEED_REACTION = "\"That one's just a common weed - no use to us. Keep looking.\""
+
 def draw_title_screen():
     """
     the game's title text and the New Game / Quit
@@ -480,9 +500,10 @@ def handle_desert_movement():
 def draw_desert_room():
     """
     Draw the desert biome: a sandy background, the decoy flower (hidden
-    once eaten), the ice flower placeholder (with its attention-grabbing
-    glow, hidden once collected), the sprite companion, the protagonist,
-    a "Press E" interaction hint, and a fading movement-control hint.
+    once eaten), the ice flower placeholder (hidden once collected), the
+    two ingredient flowers and decoy weed used by the potion checklist
+    puzzle (once it's active), the sprite companion, the protagonist, a
+    "Press E" interaction hint, and a fading movement-control hint.
     """
     screen.fill(DESERT_BG)
 
@@ -493,6 +514,8 @@ def draw_desert_room():
         if ice_flower_encountered:
             draw_ice_flower_glow()
         draw_ice_flower()
+    if checklist_visible:
+        draw_ingredient_flowers()
     draw_interaction_hint()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
@@ -849,7 +872,10 @@ def update_nearby_interactable():
     """
     Every frame, re-checks how close the protagonist currently is to each
     interactable object in the desert room, and updates nearby_interactable
-    to whichever single one (if any) is currently in range.
+    to whichever single one (if any) is currently in range. The two
+    ingredient flowers and the decoy weed only become interactable once
+    the checklist is visible (i.e. after View 8's dialogue), so the
+    player can't accidentally trigger the potion puzzle before it exists.
     """
     global nearby_interactable
 
@@ -861,11 +887,29 @@ def update_nearby_interactable():
         protagonist["x"] - DECOY_FLOWER_POS[0],
         protagonist["y"] - DECOY_FLOWER_POS[1],
     )
+    ingredient_1_distance = math.hypot(
+        protagonist["x"] - INGREDIENT_FLOWER_1_POS[0],
+        protagonist["y"] - INGREDIENT_FLOWER_1_POS[1],
+    )
+    ingredient_2_distance = math.hypot(
+        protagonist["x"] - INGREDIENT_FLOWER_2_POS[0],
+        protagonist["y"] - INGREDIENT_FLOWER_2_POS[1],
+    )
+    decoy_weed_distance = math.hypot(
+        protagonist["x"] - DECOY_WEED_POS[0],
+        protagonist["y"] - DECOY_WEED_POS[1],
+    )
 
     if ice_flower_encountered and not ice_flower_collected and ice_distance <= ICE_FLOWER_TRIGGER_RADIUS:
         nearby_interactable = "ice_flower"
     elif not decoy_flower_eaten and decoy_distance <= DECOY_FLOWER_RADIUS:
         nearby_interactable = "decoy_flower"
+    elif checklist_visible and not ingredient_flower_1_collected and ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+        nearby_interactable = "ingredient_flower_1"
+    elif checklist_visible and not ingredient_flower_2_collected and ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+        nearby_interactable = "ingredient_flower_2"
+    elif checklist_visible and not decoy_weed_interacted and decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
+        nearby_interactable = "decoy_weed"
     else:
         nearby_interactable = None
 
@@ -878,6 +922,12 @@ def handle_interaction_key():
         consume_ice_flower()
     elif nearby_interactable == "decoy_flower":
         consume_decoy_flower()
+    elif nearby_interactable == "ingredient_flower_1":
+        consume_ingredient_flower("ingredient_flower_1")
+    elif nearby_interactable == "ingredient_flower_2":
+        consume_ingredient_flower("ingredient_flower_2")
+    elif nearby_interactable == "decoy_weed":
+        consume_decoy_weed()
 
 def consume_ice_flower():
     """
@@ -1328,6 +1378,73 @@ def draw_room_timer():
     timer_surface = hint_font.render(f"Time left: {int(seconds_left)}s", True, color)
     timer_rect = timer_surface.get_rect(topright=(SCREEN_WIDTH - 20, CHECKLIST_POS[1] - 22))
     screen.blit(timer_surface, timer_rect)
+
+
+def draw_ingredient_flowers():
+    """
+    Draws both ingredient flowers (withered until collected) and the
+    decoy weed alongside them, but only for as long as each is still
+    uncollected/uninteracted with.
+    """
+    if not ingredient_flower_1_collected:
+        screen_x, screen_y = world_to_screen(*INGREDIENT_FLOWER_1_POS)
+        pygame.draw.circle(screen, INGREDIENT_FLOWER_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not ingredient_flower_2_collected:
+        screen_x, screen_y = world_to_screen(*INGREDIENT_FLOWER_2_POS)
+        pygame.draw.circle(screen, INGREDIENT_FLOWER_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not decoy_weed_interacted:
+        screen_x, screen_y = world_to_screen(*DECOY_WEED_POS)
+        pygame.draw.circle(screen, DECOY_WEED_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
+def consume_ingredient_flower(which):
+    """
+    Waters and collects one of the two real ingredient flowers: ticks it
+    off the checklist and plays Sprite's short "one down!" reaction line.
+
+    Args:
+        which (str): "ingredient_flower_1" or "ingredient_flower_2".
+    """
+    global ingredient_flower_1_collected, ingredient_flower_2_collected
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if which == "ingredient_flower_1":
+        ingredient_flower_1_collected = True
+    elif which == "ingredient_flower_2":
+        ingredient_flower_2_collected = True
+
+    dialogue_lines = [INGREDIENT_WATERED_REACTION]
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def consume_decoy_weed():
+    """
+    Reaction to interacting with the checklist puzzle's decoy weed: does
+    not affect the checklist, just a short flavour line. Only happens once.
+    """
+    global decoy_weed_interacted
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    decoy_weed_interacted = True
+
+    dialogue_lines = [DECOY_WEED_REACTION]
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
 
 
 running = True
