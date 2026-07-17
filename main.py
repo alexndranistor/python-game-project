@@ -282,6 +282,7 @@ checklist_visible = False
 CHECKLIST_POS = (SCREEN_WIDTH - 210, 20)
 CHECKLIST_WIDTH = 190
 CHECKLIST_LINE_HEIGHT = 26
+CHECKLIST_CHECKBOX_SIZE = 14
 
 # --- Room timer (90-second countdown, starts once View 8 finishes) -------
 ROOM_TIMER_DURATION_MS = 90000
@@ -439,9 +440,12 @@ def handle_dialogue_input(event):
     """
     Handle player input while a dialogue text box is active. Both
     pressing Enter/Space and left-clicking the mouse advance the dialogue.
-    On the final line, dialogue_on_complete decides what happens next: it
-    either chains straight into another dialogue, or simply switches to
-    next_state_after_dialogue as normal.
+    While playing through the potion recipe intro (View 8), the
+    ingredient checklist pops in the instant the dialogue reaches the
+    line that mentions it, rather than waiting for the whole
+    conversation to finish. On the final line, dialogue_on_complete
+    decides what happens next: it either chains straight into another
+    dialogue, or simply switches to next_state_after_dialogue as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -458,6 +462,10 @@ def handle_dialogue_input(event):
         else:
             current_line_index += 1
             revealed_chars = 0
+
+            if dialogue_lines is POTION_RECIPE_INTRO_TEXT and current_line_index == 3 and not checklist_visible:
+                show_ingredient_checklist()
+
             if current_line_index >= len(dialogue_lines):
                 if dialogue_on_complete == "START_DESERT_INTRO":
                     dialogue_on_complete = None
@@ -474,10 +482,6 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "START_POTION_RECIPE_INTRO":
                     dialogue_on_complete = None
                     start_potion_recipe_intro_dialogue()
-                elif dialogue_on_complete == "SHOW_INGREDIENT_CHECKLIST":
-                    dialogue_on_complete = None
-                    show_ingredient_checklist()
-                    game_state = next_state_after_dialogue
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -1222,9 +1226,9 @@ def start_sprite_choice_2():
 def start_potion_recipe_intro_dialogue():
     """
     Plays View 8: Sprite introduces the anti-poison potion recipe and
-    the on-screen checklist. Once this dialogue finishes, the checklist
-    becomes visible and the 90-second room timer starts (see
-    show_ingredient_checklist, chained via dialogue_on_complete).
+    the on-screen checklist. The checklist itself pops in mid-dialogue
+    (handled in handle_dialogue_input) right as Sprite mentions it, so
+    nothing further needs to happen once this dialogue completes.
     """
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
     global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
@@ -1235,7 +1239,7 @@ def start_potion_recipe_intro_dialogue():
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "DESERT_ROOM"
     dialogue_backdrop_state = "DESERT_ROOM"
-    dialogue_on_complete = "SHOW_INGREDIENT_CHECKLIST"
+    dialogue_on_complete = None
     game_state = "DIALOGUE"
 
 
@@ -1349,7 +1353,8 @@ def handle_dialogue_choice_input(event):
 def show_ingredient_checklist():
     """
     Makes the potion checklist visible and starts the 90-second room
-    timer. Called once, right after View 8's dialogue finishes.
+    timer. Called the instant the potion-recipe dialogue reaches the
+    line about the checklist appearing (see handle_dialogue_input).
     """
     global checklist_visible
 
@@ -1360,8 +1365,8 @@ def show_ingredient_checklist():
 def draw_checklist():
     """
     Draws the top-right "post-it note" checklist of ingredient flowers
-    still needed, with a strikethrough over any that are already
-    collected.
+    still needed, each with its own tick-box that fills in with a
+    checkmark once that flower has been collected.
     """
     checklist_x, checklist_y = CHECKLIST_POS
     box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
@@ -1374,12 +1379,25 @@ def draw_checklist():
     ]
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
-        text_surface = hint_font.render(name, True, BLACK)
-        text_rect = text_surface.get_rect(topleft=(box_rect.x + 10, line_y))
-        screen.blit(text_surface, text_rect)
+        checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
         if collected:
-            strike_y = text_rect.centery
-            pygame.draw.line(screen, BLACK, (text_rect.left, strike_y), (text_rect.right, strike_y), 2)
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.left + 2, checkbox_rect.centery),
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                2,
+            )
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                (checkbox_rect.right - 1, checkbox_rect.top + 2),
+                2,
+            )
+
+        text_surface = hint_font.render(name, True, BLACK)
+        text_rect = text_surface.get_rect(topleft=(checkbox_rect.right + 8, line_y))
+        screen.blit(text_surface, text_rect)
 
 
 def start_room_timer():
