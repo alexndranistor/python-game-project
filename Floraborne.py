@@ -32,11 +32,22 @@ BLACK = (0, 0, 0)
 DESERT_BG = (194, 178, 128)
 SWAMP_BG = (70, 90, 60)
 
-# --- Fonts
-title_font = pygame.font.SysFont(None, 64)
-menu_font = pygame.font.SysFont(None, 40)
-dialogue_font = pygame.font.SysFont(None, 32)
-hint_font = pygame.font.SysFont(None, 20)
+# --- Fonts (pygame doesn't ship a dedicated pixel font, so this tries a
+# few common blocky/monospace system fonts for a more retro feel, and
+# falls back to the plain default font if none of them are installed)
+def get_pixel_font(size):
+    pixel_font_candidates = ["couriernew", "consolas", "menlo", "monaco", "dejavusansmono"]
+    available_fonts = pygame.font.get_fonts()
+    for candidate in pixel_font_candidates:
+        if candidate in available_fonts:
+            return pygame.font.SysFont(candidate, size, bold=True)
+    return pygame.font.SysFont(None, size)
+
+
+title_font = get_pixel_font(64)
+menu_font = get_pixel_font(40)
+dialogue_font = get_pixel_font(32)
+hint_font = get_pixel_font(20)
 
 # --- Core state machine
 # Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER", "WIN"
@@ -557,6 +568,149 @@ ENDING_NEITHER_HELP_TEXT = [
 ]
 SELFISH_LOSS_TEXT = "Neither Sprite nor the Rat trusted you enough to help when it mattered. The potions alone were never going to be enough - not without people willing to stand with you."
 
+# --- Image loading helpers (graceful fallback to the existing plain shapes if a
+# file is missing, corrupted, or the wrong format - this also doubles as this
+# project's required error-handling for unexpected/bad input) ----------------
+def load_image_safe(path, size=None):
+    """
+    Loads a single-image PNG and optionally scales it. Returns None (instead of
+    raising) if the file is missing or can't be read, so callers can fall back
+    to drawing the original plain shape instead of crashing the game.
+    """
+    try:
+        image = pygame.image.load(path).convert_alpha()
+        if size is not None:
+            image = pygame.transform.scale(image, size)
+        return image
+    except (pygame.error, FileNotFoundError):
+        return None
+
+
+def load_sheet_frame(path, crop_box, size=None):
+    """
+    Loads one frame out of a larger spritesheet PNG, using pixel coordinates
+    (x, y, width, height) rather than a separately-cropped file. Returns None
+    on any failure (missing file, bad crop box, unreadable image), the same
+    as load_image_safe.
+    """
+    try:
+        sheet = pygame.image.load(path).convert_alpha()
+        frame = sheet.subsurface(pygame.Rect(*crop_box)).copy()
+        if size is not None:
+            frame = pygame.transform.scale(frame, size)
+        return frame
+    except (pygame.error, FileNotFoundError, ValueError):
+        return None
+
+
+# --- All graphics currently supplied via the asset checklist, loaded once at
+# startup. Anything not yet supplied simply stays None, and every draw
+# function below already falls back to its original plain shape in that case.
+IMAGES = {
+    "protagonist": load_image_safe("assets/protagonist.png", (PROTAGONIST_SIZE, PROTAGONIST_SIZE)),
+    "sprite": load_sheet_frame("assets/sprite_spritesheet.png", (0, 0, 20, 16), (SPRITE_CHAR_RADIUS * 2, SPRITE_CHAR_RADIUS * 2)),
+    "rat": load_sheet_frame("assets/grumpy_rat.png", (0, 0, 32, 32), (24, 24)),
+    "decoy_flower_desert": load_image_safe("assets/first_decoy_flower_desert.png", (24, 24)),
+    "ice_flower": load_image_safe("assets/ice_flower.png", (24, 24)),
+    "sunroot_bloom": load_image_safe("assets/Flower 8 - ORANGE.png", (24, 24)),
+    "cactus_blossom": load_image_safe("assets/Flower 2 - MAGENTA.png", (24, 24)),
+    "decoy_weed_desert": load_image_safe("assets/Flower 12 - RED.png", (24, 24)),
+    "marshglow_lily": load_image_safe("assets/Flower 12 - YELLOW.png", (24, 24)),
+    "bogroot_bell": load_image_safe("assets/Flower 7 - PURPLE.png", (24, 24)),
+    "mistpetal_reed": load_image_safe("assets/Flower 7 - BLUE.png", (24, 24)),
+    "blistercap_bloom": load_image_safe("assets/Flower 8 - RED.png", (24, 24)),
+    "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (24, 24)),
+    "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (24, 24)),
+}
+
+
+def draw_image_or_circle(image, world_pos, fallback_color, radius=12):
+    """
+    Shared helper for every small world object: blits the given pre-loaded
+    image centered at world_pos if it loaded successfully, otherwise falls
+    back to the original pygame.draw.circle placeholder at the same spot.
+    """
+    screen_x, screen_y = world_to_screen(*world_pos)
+    if image is not None:
+        image_rect = image.get_rect(center=(int(screen_x), int(screen_y)))
+        screen.blit(image, image_rect)
+    else:
+        pygame.draw.circle(screen, fallback_color, (int(screen_x), int(screen_y)), radius)
+
+
+def draw_vertical_gradient(top_color, bottom_color):
+    """
+    Fills the whole screen with a vertical colour gradient - used as the base
+    layer for the desert and swamp backgrounds instead of a single flat fill.
+    """
+    for y in range(SCREEN_HEIGHT):
+        ratio = y / SCREEN_HEIGHT
+        color = (
+            int(top_color[0] + (bottom_color[0] - top_color[0]) * ratio),
+            int(top_color[1] + (bottom_color[1] - top_color[1]) * ratio),
+            int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio),
+        )
+        pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
+
+
+# --- Improvised procedural backgrounds (no PNG assets supplied for these yet,
+# so these use pygame's own drawing functions to give each biome some depth
+# instead of one flat fill colour) --------------------------------------------
+DESERT_BG_TOP = (226, 206, 156)
+DESERT_BG_BOTTOM = (176, 148, 94)
+DESERT_DUNE_COLOR = (163, 138, 88)
+DESERT_DUNE_WORLD_X_POSITIONS = [150, 500, 850, 1150, 1450]
+
+SWAMP_BG_TOP = (60, 80, 62)
+SWAMP_BG_BOTTOM = (32, 46, 38)
+SWAMP_MUD_COLOR = (46, 58, 40)
+SWAMP_MUD_WORLD_X_POSITIONS = [250, 600, 950, 1300]
+SWAMP_FOG_COLOR = (150, 170, 140)
+SWAMP_FOG_WORLD_X_POSITIONS = [100, 450, 800, 1150, 1500]
+
+
+def draw_desert_background():
+    """
+    Draws a sandy gradient with a few soft dune shapes (scrolling with the
+    camera like everything else in the room) and a fixed sun in the corner,
+    standing in for a proper desert background image.
+    """
+    draw_vertical_gradient(DESERT_BG_TOP, DESERT_BG_BOTTOM)
+
+    for dune_x in DESERT_DUNE_WORLD_X_POSITIONS:
+        screen_x, _ = world_to_screen(dune_x, 0)
+        pygame.draw.ellipse(
+            screen, DESERT_DUNE_COLOR,
+            pygame.Rect(int(screen_x) - 140, SCREEN_HEIGHT - 90, 280, 140),
+        )
+
+    sun_center = (SCREEN_WIDTH - 90, 80)
+    pygame.draw.circle(screen, (255, 236, 179), sun_center, 45)
+    pygame.draw.circle(screen, (255, 250, 214), sun_center, 45, 3)
+
+
+def draw_swamp_background():
+    """
+    Draws a murky gradient with soft fog patches and darker mud patches
+    (both scrolling with the camera), standing in for a proper swamp
+    background image.
+    """
+    draw_vertical_gradient(SWAMP_BG_TOP, SWAMP_BG_BOTTOM)
+
+    for mud_x in SWAMP_MUD_WORLD_X_POSITIONS:
+        screen_x, _ = world_to_screen(mud_x, 0)
+        pygame.draw.ellipse(
+            screen, SWAMP_MUD_COLOR,
+            pygame.Rect(int(screen_x) - 100, SCREEN_HEIGHT - 70, 220, 100),
+        )
+
+    for fog_x in SWAMP_FOG_WORLD_X_POSITIONS:
+        screen_x, _ = world_to_screen(fog_x, 0)
+        fog_surface = pygame.Surface((260, 120), pygame.SRCALPHA)
+        pygame.draw.ellipse(fog_surface, (*SWAMP_FOG_COLOR, 60), fog_surface.get_rect())
+        screen.blit(fog_surface, (int(screen_x) - 130, 130))
+
+
 def draw_title_screen():
     """
     Draw the game's title text and the New Game / Quit
@@ -669,8 +823,8 @@ def draw_text_box(text):
     Draw the scrolling dialogue box at the bottom of the screen.
     """
     box_rect = pygame.Rect(50, 420, SCREEN_WIDTH - 100, 150)
-    pygame.draw.rect(screen, BLACK, box_rect)
-    pygame.draw.rect(screen, WHITE, box_rect, 3)
+    pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
+    pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
     max_text_width = box_rect.width - 40
     wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
@@ -921,9 +1075,8 @@ def draw_room():
     fixed spot until he's a following companion, at which point
     draw_rat_companion() takes over instead, alongside Sprite.
     """
-    screen.fill(ROOM_CONFIG[current_room]["bg_color"])
-
     if current_room == "desert":
+        draw_desert_background()
         if not decoy_flower_eaten:
             draw_decoy_flower_glow()
             draw_decoy_flower()
@@ -934,6 +1087,7 @@ def draw_room():
         if checklist_visible:
             draw_ingredient_flowers()
     elif current_room == "swamp":
+        draw_swamp_background()
         if swamp_checklist_visible:
             draw_swamp_flowers()
         if swamp_bridge_checklist_visible:
@@ -943,13 +1097,18 @@ def draw_room():
             draw_rat()
         if rat_resolved:
             draw_door()
+    else:
+        screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
     draw_interaction_hint()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
     protagonist_rect.center = (int(protagonist_screen_x), int(protagonist_screen_y))
-    pygame.draw.rect(screen, WHITE, protagonist_rect)
+    if IMAGES["protagonist"] is not None:
+        screen.blit(IMAGES["protagonist"], protagonist_rect)
+    else:
+        pygame.draw.rect(screen, WHITE, protagonist_rect)
 
     draw_sprite_character()
     if rat_state == "FOLLOWING":
@@ -1092,8 +1251,7 @@ def draw_decoy_flower():
     """
     Draw the desert's decoy flower.
     """
-    screen_x, screen_y = world_to_screen(*DECOY_FLOWER_POS)
-    pygame.draw.circle(screen, DECOY_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
+    draw_image_or_circle(IMAGES["decoy_flower_desert"], DECOY_FLOWER_POS, DECOY_FLOWER_COLOR, 12)
 
 def check_decoy_flower_trigger():
     """
@@ -1131,8 +1289,7 @@ def draw_sprite_character():
     """
     if sprite_state == "HIDDEN":
         return
-    screen_x, screen_y = world_to_screen(sprite_draw_pos[0], sprite_draw_pos[1])
-    pygame.draw.circle(screen, SPRITE_CHAR_COLOR, (int(screen_x), int(screen_y)), SPRITE_CHAR_RADIUS)
+    draw_image_or_circle(IMAGES["sprite"], sprite_draw_pos, SPRITE_CHAR_COLOR, SPRITE_CHAR_RADIUS)
 
 def activate_heat_drain():
     """
@@ -1235,10 +1392,9 @@ def update_camera():
 
 def draw_ice_flower():
     """
-    Draw a placeholder for the ice flower.
+    Draw the ice flower (or its fallback placeholder).
     """
-    screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
-    pygame.draw.circle(screen, ICE_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
+    draw_image_or_circle(IMAGES["ice_flower"], ICE_FLOWER_POS, ICE_FLOWER_COLOR, 12)
 
 def check_ice_flower_trigger():
     """
@@ -1553,12 +1709,12 @@ def draw_item_popup():
 
     box_rect = pygame.Rect(0, 0, 400, 220)
     box_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-    pygame.draw.rect(screen, BLACK, box_rect)
-    pygame.draw.rect(screen, WHITE, box_rect, 3)
+    pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
+    pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
     icon_rect = pygame.Rect(box_rect.x + 20, box_rect.y + 20, ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE)
     if item_popup_icon_path is None:
-        pygame.draw.rect(screen, (150, 150, 150), icon_rect)
+        pygame.draw.rect(screen, (150, 150, 150), icon_rect, border_radius=10)
     else:
         icon_surface = pygame.image.load(item_popup_icon_path).convert_alpha()
         icon_surface = pygame.transform.scale(icon_surface, (ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE))
@@ -1617,11 +1773,11 @@ def draw_hp_bar():
     """
     bar_x, bar_y = HP_BAR_POS
     outline_rect = pygame.Rect(bar_x, bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
-    pygame.draw.rect(screen, WHITE, outline_rect, 2)
+    pygame.draw.rect(screen, WHITE, outline_rect, 2, border_radius=8)
 
     fill_width = int(HP_BAR_WIDTH * (hp / MAX_HP))
     fill_rect = pygame.Rect(bar_x, bar_y, fill_width, HP_BAR_HEIGHT)
-    pygame.draw.rect(screen, pygame.Color(get_hp_bar_color(hp)), fill_rect)
+    pygame.draw.rect(screen, pygame.Color(get_hp_bar_color(hp)), fill_rect, border_radius=8)
 
     hp_text_surface = hint_font.render(f"HP: {hp}/{MAX_HP}", True, WHITE)
     hp_text_rect = hp_text_surface.get_rect(topleft=(bar_x, bar_y + HP_BAR_HEIGHT + 4))
@@ -1872,8 +2028,8 @@ def draw_dialogue_choice():
         screen.fill(BARREN_BG)
 
     box_rect = pygame.Rect(50, 330, SCREEN_WIDTH - 100, 240)
-    pygame.draw.rect(screen, BLACK, box_rect)
-    pygame.draw.rect(screen, WHITE, box_rect, 3)
+    pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
+    pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
     max_text_width = box_rect.width - 40
     line_height = dialogue_font.get_linesize()
@@ -1943,8 +2099,8 @@ def draw_checklist():
     """
     checklist_x, checklist_y = CHECKLIST_POS
     box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect)
-    pygame.draw.rect(screen, BLACK, box_rect, 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
 
     checklist_items = [
         (INGREDIENT_FLOWER_1_NAME, ingredient_flower_1_collected),
@@ -1953,7 +2109,7 @@ def draw_checklist():
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
-        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2, border_radius=4)
         if collected:
             pygame.draw.line(
                 screen, BLACK,
@@ -1980,27 +2136,23 @@ def draw_swamp_flowers():
     if eaten), and the 1 harmless decoy weed - each only for as long as
     it's still uncollected/uninteracted with.
     """
-    ingredient_positions_and_flags = [
-        (SWAMP_INGREDIENT_FLOWER_1_POS, swamp_ingredient_flower_1_collected),
-        (SWAMP_INGREDIENT_FLOWER_2_POS, swamp_ingredient_flower_2_collected),
-        (SWAMP_INGREDIENT_FLOWER_3_POS, swamp_ingredient_flower_3_collected),
+    ingredient_positions_and_images = [
+        (SWAMP_INGREDIENT_FLOWER_1_POS, swamp_ingredient_flower_1_collected, IMAGES["marshglow_lily"]),
+        (SWAMP_INGREDIENT_FLOWER_2_POS, swamp_ingredient_flower_2_collected, IMAGES["bogroot_bell"]),
+        (SWAMP_INGREDIENT_FLOWER_3_POS, swamp_ingredient_flower_3_collected, IMAGES["mistpetal_reed"]),
     ]
-    for position, collected in ingredient_positions_and_flags:
+    for position, collected, image in ingredient_positions_and_images:
         if not collected:
-            screen_x, screen_y = world_to_screen(*position)
-            pygame.draw.circle(screen, SWAMP_INGREDIENT_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+            draw_image_or_circle(image, position, SWAMP_INGREDIENT_WITHERED_COLOR, 12)
 
     if not swamp_harmful_flower_eaten:
-        screen_x, screen_y = world_to_screen(*SWAMP_HARMFUL_FLOWER_POS)
-        pygame.draw.circle(screen, SWAMP_HARMFUL_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["blistercap_bloom"], SWAMP_HARMFUL_FLOWER_POS, SWAMP_HARMFUL_COLOR, 12)
 
     if not swamp_harmful_weed_eaten:
-        screen_x, screen_y = world_to_screen(*SWAMP_HARMFUL_WEED_POS)
-        pygame.draw.circle(screen, SWAMP_HARMFUL_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["stingmoss_tangle"], SWAMP_HARMFUL_WEED_POS, SWAMP_HARMFUL_COLOR, 12)
 
     if not swamp_decoy_weed_eaten:
-        screen_x, screen_y = world_to_screen(*SWAMP_DECOY_WEED_POS)
-        pygame.draw.circle(screen, SWAMP_DECOY_WEED_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["swamp_decoy_weed"], SWAMP_DECOY_WEED_POS, SWAMP_DECOY_WEED_COLOR, 12)
 
 
 def draw_swamp_checklist():
@@ -2012,8 +2164,8 @@ def draw_swamp_checklist():
     """
     checklist_x, checklist_y = SWAMP_CHECKLIST_POS
     box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 3)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect)
-    pygame.draw.rect(screen, BLACK, box_rect, 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
 
     checklist_items = [
         (SWAMP_INGREDIENT_FLOWER_1_NAME, swamp_ingredient_flower_1_collected),
@@ -2023,7 +2175,7 @@ def draw_swamp_checklist():
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
-        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2, border_radius=4)
         if collected:
             pygame.draw.line(
                 screen, BLACK,
@@ -2077,8 +2229,8 @@ def draw_swamp_bridge_checklist():
     """
     checklist_x, checklist_y = SWAMP_CHECKLIST_POS
     box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect)
-    pygame.draw.rect(screen, BLACK, box_rect, 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
 
     checklist_items = [
         (TINKER_ITEM_1_NAME, tinker_item_1_collected),
@@ -2087,7 +2239,7 @@ def draw_swamp_bridge_checklist():
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
-        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2, border_radius=4)
         if collected:
             pygame.draw.line(
                 screen, BLACK,
@@ -2177,16 +2329,13 @@ def draw_ingredient_flowers():
     uncollected/uninteracted with.
     """
     if not ingredient_flower_1_collected:
-        screen_x, screen_y = world_to_screen(*INGREDIENT_FLOWER_1_POS)
-        pygame.draw.circle(screen, INGREDIENT_FLOWER_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["sunroot_bloom"], INGREDIENT_FLOWER_1_POS, INGREDIENT_FLOWER_WITHERED_COLOR, 12)
 
     if not ingredient_flower_2_collected:
-        screen_x, screen_y = world_to_screen(*INGREDIENT_FLOWER_2_POS)
-        pygame.draw.circle(screen, INGREDIENT_FLOWER_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["cactus_blossom"], INGREDIENT_FLOWER_2_POS, INGREDIENT_FLOWER_WITHERED_COLOR, 12)
 
     if not decoy_weed_interacted:
-        screen_x, screen_y = world_to_screen(*DECOY_WEED_POS)
-        pygame.draw.circle(screen, DECOY_WEED_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["decoy_weed_desert"], DECOY_WEED_POS, DECOY_WEED_COLOR, 12)
 
 
 def consume_ingredient_flower(which):
@@ -2603,8 +2752,7 @@ def draw_rat():
     """
     if rat_outcome in ("died", "bitter"):
         return
-    screen_x, screen_y = world_to_screen(*RAT_POS)
-    pygame.draw.circle(screen, RAT_COLOR, (int(screen_x), int(screen_y)), 12)
+    draw_image_or_circle(IMAGES["rat"], RAT_POS, RAT_COLOR, 12)
 
 
 def draw_rat_companion():
@@ -2613,8 +2761,7 @@ def draw_rat_companion():
     join as a companion (Commit 14), the same way draw_sprite_character()
     draws Sprite.
     """
-    screen_x, screen_y = world_to_screen(rat_draw_pos[0], rat_draw_pos[1])
-    pygame.draw.circle(screen, RAT_COLOR, (int(screen_x), int(screen_y)), 12)
+    draw_image_or_circle(IMAGES["rat"], rat_draw_pos, RAT_COLOR, 12)
 
 
 def start_rat_following():
