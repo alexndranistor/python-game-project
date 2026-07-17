@@ -451,9 +451,120 @@ BRIDGE_FIXED_TEXT = [
     "\"There - that ought to hold. Let's keep moving.\"",
 ]
 
+# --- The Rat encounter & backstory (Commit 13) ---------------------------
+RAT_POS = (1450, 330)
+RAT_COLOR = (90, 80, 70)
+RAT_TRIGGER_RADIUS = 60
+rat_encountered = False
+rat_resolved = False
+rat_outcome = None  # None, "died", "bitter", or "helped"
+
+RAT_FRIENDSHIP_LOW_THRESHOLD = 3   # at or below this -> lowest tier (he runs off and dies)
+RAT_FRIENDSHIP_HIGH_THRESHOLD = 8  # at or above this -> highest tier (healed and helping); between the two -> healed but bitter
+
+RAT_ENCOUNTER_TEXT = [
+    "Past the bridge, huddled in the shadow of a fallen log, something small and hunched flinches at the sound of your footsteps.",
+    "A rat - or what's left of one. Fur matted, one eye swollen shut, breathing shallow and ragged.",
+    "\"...Go away.\" His voice is hoarse, more growl than word. \"Don't need help. Don't want it either.\"",
+    "Sprite's light dims, hovering carefully at a distance. \"...He's in a bad way. But pushing straight in isn't going to get us anywhere. Try talking to him properly.\"",
+]
+
+RAT_PRODDING_INTRO_TEXT = [
+    "\"What happened to you?\" you ask, careful to keep your voice gentle.",
+    "The rat's good eye narrows, suspicious. \"Why do you care.\" It isn't really a question.",
+]
+
+RAT_CHOICE_1_OPTIONS = [
+    "I just want to understand what happened to you.",
+    "You look like you could use someone to talk to.",
+    "Fine - suit yourself. I'll leave you be.",
+]
+RAT_CHOICE_1_DELTAS = [3, 1, -1]
+RAT_CHOICE_1_REACTIONS = [
+    "He studies you a long moment, like he's waiting for the catch. There isn't one, apparently. \"...Tch. Fine. Wasn't always like this, you know. Had a life. A den. Things I was proud of.\"",
+    "\"...Didn't ask for company.\" But he doesn't tell you to leave again, either. \"There was a den. A life, before. Guess that's gone now, same as everything else.\"",
+    "\"...Fine.\" He curls tighter into himself and says nothing else, but doesn't stop you when you crouch down anyway.",
+]
+
+RAT_BETWEEN_CHOICES_1_TEXT = [
+    "\"I used to run the trade routes through this whole swamp,\" he mutters, almost to himself. \"Knew every safe path, every shortcut. Everyone came to me.\"",
+    "\"Then the surge hit. Overnight the whole place turned to poison and mud, and everyone who used to need me just... left. Or didn't make it.\"",
+    "\"Didn't have anywhere left to run trade to. So I stayed. Because someone had to know what this place used to be.\"",
+]
+
+RAT_CHOICE_2_OPTIONS = [
+    "That's not your fault. None of this was.",
+    "That sounds really lonely.",
+    "Sounds like you just felt sorry for yourself.",
+]
+RAT_CHOICE_2_DELTAS = [3, 1, -1]
+RAT_CHOICE_2_REACTIONS = [
+    "Something in his shoulders loosens, just slightly. \"...Wish that were true. But I wasn't just watching, near the end. I made it worse.\"",
+    "\"...Lonely doesn't cover it.\" A pause. \"But you're not wrong, either.\"",
+    "His good eye snaps back to you, sharp. \"You don't know anything about it.\" But he keeps talking anyway - like he needs to, even now.",
+]
+
+RAT_BETWEEN_CHOICES_2_TEXT = [
+    "\"Started hoarding, is what I did. Whatever herbs and roots still grew clean, I took for myself instead of sharing them out. Told myself it was just sense - survival.\"",
+    "\"But there were others who needed that stuff worse than I did. Sick. Starving. Didn't matter to me at the time.\"",
+    "\"By the time I actually looked around at what I'd done, there wasn't anyone left close enough to make it right with.\"",
+]
+
+RAT_CHOICE_3_OPTIONS = [
+    "Everyone deserves a chance to make things right.",
+    "You can still do something about it now.",
+    "Sounds like you got what you deserved.",
+]
+RAT_CHOICE_3_DELTAS = [3, 1, -1]
+RAT_CHOICE_3_REACTIONS = [
+    "For the first time, his voice properly cracks. \"...Do they. Do I.\" He doesn't sound like he believes it. But he wants to.",
+    "\"...Maybe.\" It's barely a whisper. \"Don't know where I'd even start.\"",
+    "\"...Yeah.\" He looks away, and for a moment he looks smaller than the state he's already in. \"Yeah, guess I did.\"",
+]
+
+RAT_BETWEEN_CHOICES_3_TEXT = [
+    "Sprite drifts a little closer, quiet for once. \"For what it's worth - the balance potion we've been carrying was actually meant for this. For healing things this swamp broke.\"",
+    "The rat's good eye flicks toward you, then away again. \"...You'd waste that. On me.\"",
+    "\"That depends,\" you say, \"on whether you'll actually let us.\"",
+]
+
+RAT_CHOICE_4_OPTIONS = [
+    "We're not leaving until you let us help. Please.",
+    "It's your choice. But we came all this way for you.",
+    "Forget it - clearly you don't want it.",
+]
+RAT_CHOICE_4_DELTAS = [3, 1, -1]
+RAT_CHOICE_4_REACTIONS = [
+    "Something in him finally breaks - not in anger, this time. \"...Okay.\" It's barely audible. \"Okay. Do it, then. Before I change my mind.\"",
+    "A long silence. Then, grudgingly: \"...Fine. Do what you're going to do.\"",
+    "He flinches, curling away from you entirely. \"...Knew it. Knew you didn't actually mean it.\"",
+]
+
+RAT_OUTCOME_DIED_TEXT = [
+    "Before you can move, he's already scrambling backward, favouring his bad leg, refusing to look at you.",
+    "\"...Don't. I mean it.\" And then he's gone, vanishing into the reeds before either of you can stop him.",
+    "Sprite doesn't say anything for a long moment. \"...We should keep moving,\" she finally says, quieter than usual.",
+]
+
+RAT_OUTCOME_BITTER_TEXT = [
+    "He doesn't pull away this time. The balance potion does its work quickly - his breathing eases, the swelling in his eye already fading.",
+    "\"...There.\" He gets shakily to his feet, testing his own weight like he doesn't quite trust it. \"Healed. Happy now?\"",
+    "\"Don't expect me to come along, though.\" He won't quite meet your eyes. \"Healed's not the same as forgiven. Not from where I'm standing.\"",
+    "He limps off without another word, healed but no less alone than he was before.",
+]
+
+RAT_OUTCOME_HELPED_TEXT = [
+    "He doesn't pull away this time. The balance potion does its work quickly - his breathing eases, the swelling in his eye fading, his whole body finally unclenching.",
+    "He gets to his feet, and for a long moment just... stands there, like he isn't sure what to do with the feeling.",
+    "\"...Nobody's asked about any of that in a long time.\" His voice wavers, and he doesn't bother hiding it. \"Or bothered enough to stick around for the answer.\"",
+    "\"I'm sorry. For all of it - the hoarding, the running, all of it. I mean that.\"",
+    "\"...Let me come with you. Least I can do is help undo some of what I helped break.\"",
+    "Sprite's light flares, warm and genuine. \"...Welcome aboard, then.\"",
+]
+
 def draw_title_screen():
     """
-    the game's title text and the New Game / Quit
+    Draw the game's title text and the New Game / Quit
     menu, highlighting whichever option is currently selected. Also
     shows this session's running statistics (games played and wins)
     underneath the menu once at least one game has been played.
@@ -651,6 +762,33 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "START_BRIDGE_INTRO":
                     dialogue_on_complete = None
                     start_bridge_intro_dialogue()
+                elif dialogue_on_complete == "RAT_PRODDING_INTRO":
+                    dialogue_on_complete = None
+                    start_rat_prodding_intro_dialogue()
+                elif dialogue_on_complete == "RAT_CHOICE_1":
+                    dialogue_on_complete = None
+                    start_rat_choice_1()
+                elif dialogue_on_complete == "RAT_BETWEEN_CHOICES_1":
+                    dialogue_on_complete = None
+                    start_rat_between_choices_1_dialogue()
+                elif dialogue_on_complete == "RAT_CHOICE_2":
+                    dialogue_on_complete = None
+                    start_rat_choice_2()
+                elif dialogue_on_complete == "RAT_BETWEEN_CHOICES_2":
+                    dialogue_on_complete = None
+                    start_rat_between_choices_2_dialogue()
+                elif dialogue_on_complete == "RAT_CHOICE_3":
+                    dialogue_on_complete = None
+                    start_rat_choice_3()
+                elif dialogue_on_complete == "RAT_BETWEEN_CHOICES_3":
+                    dialogue_on_complete = None
+                    start_rat_between_choices_3_dialogue()
+                elif dialogue_on_complete == "RAT_CHOICE_4":
+                    dialogue_on_complete = None
+                    start_rat_choice_4()
+                elif dialogue_on_complete == "RESOLVE_RAT_OUTCOME":
+                    dialogue_on_complete = None
+                    resolve_rat_outcome()
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -770,8 +908,8 @@ def draw_room():
     sprite companion, interaction hint, control hint) plus that room's
     own one-off story elements. That's the desert's decoy flower, ice
     flower, and ingredient checklist puzzle, or the swamp's own
-    3-ingredient puzzle, harmful decoys (Commit 11), and bridge/tinker
-    items (Commit 12).
+    3-ingredient puzzle, harmful decoys (Commit 11), bridge/tinker
+    items (Commit 12), and the Rat past the bridge (Commit 13).
     """
     screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
@@ -791,6 +929,8 @@ def draw_room():
         if swamp_bridge_checklist_visible:
             draw_tinker_items()
         draw_bridge()
+        if swamp_bridge_fixed:
+            draw_rat()
 
     draw_interaction_hint()
 
@@ -1177,8 +1317,10 @@ def update_nearby_interactable():
     harmful decoys, and its harmless decoy weed only become interactable
     once its own checklist is visible (Commit 11). The two tinkering
     parts only become interactable once the bridge checklist is visible,
-    and the bridge itself only becomes interactable once the tinkering
-    potion is brewed and it isn't already fixed (Commit 12).
+    the bridge itself only becomes interactable once the tinkering
+    potion is brewed and it isn't already fixed (Commit 12), and the Rat
+    only becomes interactable once the bridge is fixed and he hasn't been
+    encountered yet (Commit 13).
     """
     global nearby_interactable
 
@@ -1251,6 +1393,10 @@ def update_nearby_interactable():
             protagonist["y"] - TINKER_ITEM_2_POS[1],
         )
         bridge_distance = abs(protagonist["x"] - SWAMP_BRIDGE_X)
+        rat_distance = math.hypot(
+            protagonist["x"] - RAT_POS[0],
+            protagonist["y"] - RAT_POS[1],
+        )
 
         if swamp_checklist_visible and not swamp_ingredient_flower_1_collected and swamp_ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
             nearby_interactable = "swamp_ingredient_flower_1"
@@ -1270,6 +1416,8 @@ def update_nearby_interactable():
             nearby_interactable = "tinker_item_2"
         elif swamp_tinker_potion_brewed and not swamp_bridge_fixed and bridge_distance <= BRIDGE_TRIGGER_RADIUS:
             nearby_interactable = "bridge"
+        elif swamp_bridge_fixed and not rat_encountered and rat_distance <= RAT_TRIGGER_RADIUS:
+            nearby_interactable = "rat"
         else:
             nearby_interactable = None
 
@@ -1303,6 +1451,8 @@ def handle_interaction_key():
         consume_tinker_item(nearby_interactable)
     elif nearby_interactable == "bridge":
         repair_bridge()
+    elif nearby_interactable == "rat":
+        encounter_rat()
 
 def consume_ice_flower():
     """
@@ -2241,6 +2391,193 @@ def repair_bridge():
     game_state = "DIALOGUE"
 
 
+def encounter_rat():
+    """
+    Triggered the first time the player interacts with the Rat: plays
+    his initial grumpy refusal, then chains automatically (via
+    dialogue_on_complete) through the prodding intro and all four
+    friendship checks without needing another keypress in between.
+    """
+    global rat_encountered
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if rat_encountered:
+        return
+
+    rat_encountered = True
+
+    dialogue_lines = RAT_ENCOUNTER_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RAT_PRODDING_INTRO"
+    game_state = "DIALOGUE"
+
+
+def start_rat_prodding_intro_dialogue():
+    """
+    Plays the short exchange where the player first asks about the Rat's
+    backstory, ending on his suspicious "why do you care" line. Chains
+    into the first friendship check.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = RAT_PRODDING_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RAT_CHOICE_1"
+    game_state = "DIALOGUE"
+
+
+def start_rat_choice_1():
+    """Opens the first of the Rat's four friendship-check choices."""
+    start_dialogue_choice(
+        options=RAT_CHOICE_1_OPTIONS,
+        deltas=RAT_CHOICE_1_DELTAS,
+        reactions=RAT_CHOICE_1_REACTIONS,
+        target="rat",
+        on_complete="RAT_BETWEEN_CHOICES_1",
+    )
+
+
+def start_rat_between_choices_1_dialogue():
+    """Plays the backstory beat between friendship checks 1 and 2."""
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = RAT_BETWEEN_CHOICES_1_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RAT_CHOICE_2"
+    game_state = "DIALOGUE"
+
+
+def start_rat_choice_2():
+    """Opens the second of the Rat's four friendship-check choices."""
+    start_dialogue_choice(
+        options=RAT_CHOICE_2_OPTIONS,
+        deltas=RAT_CHOICE_2_DELTAS,
+        reactions=RAT_CHOICE_2_REACTIONS,
+        target="rat",
+        on_complete="RAT_BETWEEN_CHOICES_2",
+    )
+
+
+def start_rat_between_choices_2_dialogue():
+    """Plays the backstory beat between friendship checks 2 and 3."""
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = RAT_BETWEEN_CHOICES_2_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RAT_CHOICE_3"
+    game_state = "DIALOGUE"
+
+
+def start_rat_choice_3():
+    """Opens the third of the Rat's four friendship-check choices."""
+    start_dialogue_choice(
+        options=RAT_CHOICE_3_OPTIONS,
+        deltas=RAT_CHOICE_3_DELTAS,
+        reactions=RAT_CHOICE_3_REACTIONS,
+        target="rat",
+        on_complete="RAT_BETWEEN_CHOICES_3",
+    )
+
+
+def start_rat_between_choices_3_dialogue():
+    """
+    Plays the final backstory beat before the fourth friendship check,
+    where Sprite reveals the balance potion could be used to heal him.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = RAT_BETWEEN_CHOICES_3_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = "RAT_CHOICE_4"
+    game_state = "DIALOGUE"
+
+
+def start_rat_choice_4():
+    """
+    Opens the fourth and decisive friendship check, which settles
+    whether he'll actually let you heal him. Chains into resolving his
+    final outcome once its reaction line finishes.
+    """
+    start_dialogue_choice(
+        options=RAT_CHOICE_4_OPTIONS,
+        deltas=RAT_CHOICE_4_DELTAS,
+        reactions=RAT_CHOICE_4_REACTIONS,
+        target="rat",
+        on_complete="RESOLVE_RAT_OUTCOME",
+    )
+
+
+def resolve_rat_outcome():
+    """
+    Runs once the fourth and final Rat friendship check resolves: checks
+    the accumulated rat_friendship_level against the two thresholds and
+    plays whichever of the three ending dialogues applies (he dies,
+    he's healed but bitter, or he's healed and agrees to help), then
+    marks the encounter as fully resolved. This is the one moment that
+    decides the Rat's fate for the rest of the game, and it's what
+    Commit 14's branching endings will read to decide which ending plays.
+    """
+    global rat_resolved, rat_outcome
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    rat_resolved = True
+
+    if rat_friendship_level <= RAT_FRIENDSHIP_LOW_THRESHOLD:
+        rat_outcome = "died"
+        dialogue_lines = RAT_OUTCOME_DIED_TEXT
+    elif rat_friendship_level < RAT_FRIENDSHIP_HIGH_THRESHOLD:
+        rat_outcome = "bitter"
+        dialogue_lines = RAT_OUTCOME_BITTER_TEXT
+    else:
+        rat_outcome = "helped"
+        dialogue_lines = RAT_OUTCOME_HELPED_TEXT
+
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def draw_rat():
+    """
+    Draws the Rat at his fixed position past the bridge, for as long as
+    his outcome isn't "died" - once he's run off, he's simply gone.
+    """
+    if rat_outcome == "died":
+        return
+    screen_x, screen_y = world_to_screen(*RAT_POS)
+    pygame.draw.circle(screen, RAT_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
 def start_swamp_room():
     """
     Called once the potion-brewing transition dialogue finishes: switches
@@ -2260,13 +2597,14 @@ def start_swamp_room():
 
 def check_swamp_end_trigger():
     """
-    Once the protagonist reaches the far right edge of the swamp, the
-    game is won. Also updates this session's win statistics: total wins,
-    this run's time taken, and the fastest win time seen so far.
+    Once the protagonist reaches the far right edge of the swamp AND the
+    Rat encounter has been resolved (Commit 13), the game is won. Also
+    updates this session's win statistics: total wins, this run's time
+    taken, and the fastest win time seen so far.
     """
     global game_state, total_wins, last_run_time_ms, fastest_win_time_ms
 
-    if protagonist["x"] >= SWAMP_WORLD_WIDTH - PROTAGONIST_SIZE:
+    if protagonist["x"] >= SWAMP_WORLD_WIDTH - PROTAGONIST_SIZE and rat_resolved:
         game_state = "WIN"
         total_wins += 1
         last_run_time_ms = pygame.time.get_ticks() - run_start_time
@@ -2301,11 +2639,12 @@ def reset_run_state():
     """
     Resets every run-specific counter and flag back to a fresh game's
     starting values, including the swamp's ingredient/decoy flags from
-    Commit 11 and the bridge/tinkering flags added in Commit 12. Shared
-    by the game-over screen and the win screen, since both send the
-    player back to the title screen for a new attempt. Session
-    statistics (games_played, total_deaths, total_wins,
-    fastest_win_time_ms) are deliberately left untouched here.
+    Commit 11, the bridge/tinkering flags added in Commit 12, and the
+    Rat's encounter flags added in Commit 13. Shared by the game-over
+    screen and the win screen, since both send the player back to the
+    title screen for a new attempt. Session statistics (games_played,
+    total_deaths, total_wins, fastest_win_time_ms) are deliberately left
+    untouched here.
     """
     global hearts, hp, sprite_friendship_level, rat_friendship_level
     global decoy_flower_eaten, ice_flower_collected, ice_flower_encountered
@@ -2318,6 +2657,7 @@ def reset_run_state():
     global swamp_bridge_checklist_visible, swamp_tinker_potion_brewed, swamp_bridge_fixed
     global tinker_item_1_collected, tinker_item_2_collected
     global hp_heal_popup_text, hp_damage_popup_text
+    global rat_encountered, rat_resolved, rat_outcome
 
     hearts = MAX_HEARTS
     hp = MAX_HP
@@ -2353,6 +2693,9 @@ def reset_run_state():
     tinker_item_2_collected = False
     hp_heal_popup_text = None
     hp_damage_popup_text = None
+    rat_encountered = False
+    rat_resolved = False
+    rat_outcome = None
     protagonist["x"] = 1200
     protagonist["y"] = SCREEN_HEIGHT // 2
 
