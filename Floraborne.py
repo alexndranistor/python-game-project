@@ -275,7 +275,6 @@ POTION_RECIPE_INTRO_TEXT = [
     "\"Lucky for you, I happen to know the recipe for an anti-poison potion that'll get us through it safely.\"",
     "A small checklist flickers into the top-right corner of your vision - two flowers, both unticked.",
     "\"There. Now you've got a list, and I've got approximately zero patience left for standing around. Go find the first one!\"",
-    "\"Oh - and if you spot any flowers out there looking half-dead, just walk up and interact with them. Watering them back to life is pure magic, and it's mine - one thing this surge left untouched, and nobody's ever taking that away from me.\"",
     "\"Go on, then. Sniff it out like the little magic bloodhound you apparently are.\"",
 ]
 
@@ -329,6 +328,10 @@ checkpoint_state = "ROOM"  # Only one checkpoint exists so far (desert)
 GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 WIN_TEXT = "You've crossed the swamp safely, potion in hand. Floraborne's balance is one step closer to being restored."
 
+# --- Room timer display (clock icon + repositioned "Time left" text) -----
+CLOCK_ICON_SIZE = 20
+TIME_LEFT_TEXT_COLOR = (255, 221, 130)
+
 # --- Session statistics (global counters, per the project's code requirements) ---
 # Deliberately not reset by reset_run_state - these track the whole session,
 # not just the current attempt.
@@ -339,6 +342,16 @@ fastest_win_time_ms = None
 last_run_time_ms = 0
 run_start_time = 0
 friendship_points_gained = 0
+
+# --- Friendship counter box & flash-on-change effect ----------------------
+FRIENDSHIP_BOX_WIDTH = 220
+FRIENDSHIP_BOX_HEIGHT = 34
+FRIENDSHIP_FLASH_DURATION_MS = 900
+FRIENDSHIP_FLASH_COLOR_UP = (46, 204, 113)
+FRIENDSHIP_FLASH_COLOR_DOWN = (231, 76, 60)
+FRIENDSHIP_TEXT_COLOR = (255, 230, 200)
+friendship_flash_start_time = 0
+friendship_flash_color = None
 
 # --- Swamp ingredient puzzle (Commit 11) ---------------------------------
 SWAMP_CHECKLIST_POS = CHECKLIST_POS  # Reuses the same on-screen slot as the desert checklist, since only one is ever visible at a time
@@ -631,6 +644,7 @@ IMAGES = {
     "blistercap_bloom": load_image_safe("assets/Flower 8 - RED.png", (32, 32)),
     "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (32, 32)),
     "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (32, 32)),
+    "clock": load_image_safe("assets/Clock.png", (CLOCK_ICON_SIZE, CLOCK_ICON_SIZE)),
 }
 
 
@@ -1172,14 +1186,36 @@ def draw_control_hint():
 def draw_friendship_points_counter():
     """
     Draws this run's running total of friendship points gained (from every
-    Sprite/Rat dialogue choice so far this game) in the top-centre of the
-    screen, clear of the HP bar/hearts on the left and the checklist on the
-    right.
+    Sprite/Rat dialogue choice so far this game) inside a small box in the
+    top-centre of the screen, clear of the HP bar/hearts on the left and
+    the checklist on the right. Briefly flashes/sparkles green when the
+    total just went up, or red when it just went down, fading back to its
+    normal look shortly after (see trigger_friendship_flash).
     """
+    box_rect = pygame.Rect(0, 0, FRIENDSHIP_BOX_WIDTH, FRIENDSHIP_BOX_HEIGHT)
+    box_rect.center = (SCREEN_WIDTH // 2, 30)
+
+    border_color = SOFT_HINT_COLOR
+    elapsed = pygame.time.get_ticks() - friendship_flash_start_time
+    if friendship_flash_color is not None and elapsed <= FRIENDSHIP_FLASH_DURATION_MS:
+        sparkle_progress = (elapsed % 220) / 220
+        sparkle_pulse = abs(math.sin(sparkle_progress * math.pi))
+        fade = 1 - (elapsed / FRIENDSHIP_FLASH_DURATION_MS)
+        glow_radius = int(6 + sparkle_pulse * 10 * fade)
+        glow_rect = box_rect.inflate(glow_radius * 2, glow_radius * 2)
+        glow_surface = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+        glow_alpha = int(140 * fade)
+        pygame.draw.rect(glow_surface, (*friendship_flash_color, glow_alpha), glow_surface.get_rect(), border_radius=14)
+        screen.blit(glow_surface, glow_rect)
+        border_color = friendship_flash_color
+
+    pygame.draw.rect(screen, BLACK, box_rect, border_radius=10)
+    pygame.draw.rect(screen, border_color, box_rect, 2, border_radius=10)
+
     counter_surface = hint_font.render(
-        f"Friendship gained: {friendship_points_gained}", True, WHITE
+        f"Friendship gained: {friendship_points_gained}", True, FRIENDSHIP_TEXT_COLOR
     )
-    counter_rect = counter_surface.get_rect(center=(SCREEN_WIDTH // 2, 30))
+    counter_rect = counter_surface.get_rect(center=box_rect.center)
     screen.blit(counter_surface, counter_rect)
 
 
@@ -1725,17 +1761,44 @@ def consume_decoy_flower():
 
 def draw_interaction_hint():
     """
-    Draws a 'Press E' prompt above the protagonist when something interactable
-    is in range. Only shown while actually free to move around the room, so
-    it can never end up peeking out from behind a dialogue box, choice menu,
-    item popup, or the pause menu.
+    Draws a 'Press E' prompt directly above whichever interactable object is
+    currently in range (the actual flower/item/character the player is about
+    to interact with), rather than always above the protagonist. Only shown
+    while actually free to move around the room, so it can never end up
+    peeking out from behind a dialogue box, choice menu, item popup, or the
+    pause menu. The bridge is the one interactable without a single fixed
+    point (it spans the full screen height), so its hint is positioned at
+    the protagonist's current height instead.
     """
     if game_state != "ROOM" or nearby_interactable is None:
         return
 
-    screen_x, screen_y = world_to_screen(protagonist["x"], protagonist["y"])
+    interactable_world_positions = {
+        "ice_flower": ICE_FLOWER_POS,
+        "decoy_flower": DECOY_FLOWER_POS,
+        "ingredient_flower_1": INGREDIENT_FLOWER_1_POS,
+        "ingredient_flower_2": INGREDIENT_FLOWER_2_POS,
+        "decoy_weed": DECOY_WEED_POS,
+        "swamp_ingredient_flower_1": SWAMP_INGREDIENT_FLOWER_1_POS,
+        "swamp_ingredient_flower_2": SWAMP_INGREDIENT_FLOWER_2_POS,
+        "swamp_ingredient_flower_3": SWAMP_INGREDIENT_FLOWER_3_POS,
+        "swamp_harmful_flower": SWAMP_HARMFUL_FLOWER_POS,
+        "swamp_harmful_weed": SWAMP_HARMFUL_WEED_POS,
+        "swamp_decoy_weed": SWAMP_DECOY_WEED_POS,
+        "tinker_item_1": TINKER_ITEM_1_POS,
+        "tinker_item_2": TINKER_ITEM_2_POS,
+        "rat": RAT_POS,
+        "door": DOOR_POS,
+    }
+
+    if nearby_interactable == "bridge":
+        hint_world_pos = (SWAMP_BRIDGE_X, protagonist["y"])
+    else:
+        hint_world_pos = interactable_world_positions.get(nearby_interactable, (protagonist["x"], protagonist["y"]))
+
+    screen_x, screen_y = world_to_screen(*hint_world_pos)
     hint_surface = hint_font.render("Press E to Interact", True, WHITE)
-    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_HEIGHT // 2 - 20))
+    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - 40))
     screen.blit(hint_surface, hint_rect)
 
 def show_item_popup(title, description, icon_image=None):
@@ -2041,6 +2104,19 @@ def start_dialogue_choice(options, deltas, reactions, target, on_complete):
     game_state = "DIALOGUE_CHOICE"
 
 
+def trigger_friendship_flash(delta):
+    """
+    Starts a brief colored flash/sparkle on the friendship counter box:
+    green when the total just went up, red when it just went down. Called
+    from resolve_dialogue_choice whenever a choice actually changes
+    friendship_points_gained.
+    """
+    global friendship_flash_start_time, friendship_flash_color
+
+    friendship_flash_start_time = pygame.time.get_ticks()
+    friendship_flash_color = FRIENDSHIP_FLASH_COLOR_UP if delta > 0 else FRIENDSHIP_FLASH_COLOR_DOWN
+
+
 def resolve_dialogue_choice(index):
     """
     Applies the friendship point change for the chosen option, then plays
@@ -2057,6 +2133,8 @@ def resolve_dialogue_choice(index):
     elif choice_friendship_target == "rat":
         rat_friendship_level = max(0, rat_friendship_level + delta)
     friendship_points_gained += delta
+    if delta != 0:
+        trigger_friendship_flash(delta)
 
     dialogue_lines = [choice_reactions[index]]
     current_line_index = 0
@@ -2347,16 +2425,33 @@ def update_room_timer():
 
 def draw_room_timer():
     """
-    Draws the remaining seconds on the room timer just above the
-    ingredient checklist, turning red once time is running low (10
-    seconds or less) as an urgency cue.
+    Draws a small clock icon with the remaining seconds underneath it,
+    positioned below the 3 heart containers under the HP bar (instead of
+    up by the checklist, where it was easy to miss). Turns red once time
+    is running low (10 seconds or less) as an urgency cue, and otherwise
+    uses a warm, non-white colour so it actually stands out against the
+    background. Falls back to just the text, with no icon, if
+    assets/Clock.png hasn't been supplied yet.
     """
     elapsed = pygame.time.get_ticks() - room_timer_start_time
     seconds_left = max(0, (ROOM_TIMER_DURATION_MS - elapsed) // 1000 + 1)
+    color = HP_BAR_COLOR_LOW if seconds_left <= 10 else TIME_LEFT_TEXT_COLOR
 
-    color = HP_BAR_COLOR_LOW if seconds_left <= 10 else WHITE
+    heart_radius = 8
+    hp_text_bottom = HP_BAR_POS[1] + HP_BAR_HEIGHT + 4 + hint_font.get_linesize()
+    hearts_bottom = hp_text_bottom + heart_radius + 10 + heart_radius
+    center_x = HP_BAR_POS[0] + HP_BAR_WIDTH // 2
+    content_top = hearts_bottom + 12
+
+    if IMAGES["clock"] is not None:
+        clock_rect = IMAGES["clock"].get_rect(midtop=(center_x, content_top))
+        screen.blit(IMAGES["clock"], clock_rect)
+        text_top = clock_rect.bottom + 4
+    else:
+        text_top = content_top
+
     timer_surface = hint_font.render(f"Time left: {int(seconds_left)}s", True, color)
-    timer_rect = timer_surface.get_rect(topright=(SCREEN_WIDTH - 20, CHECKLIST_POS[1] - 22))
+    timer_rect = timer_surface.get_rect(midtop=(center_x, text_top))
     screen.blit(timer_surface, timer_rect)
 
 
