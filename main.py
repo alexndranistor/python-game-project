@@ -40,7 +40,7 @@ dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
 # --- Core state machine
-# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "DESERT_ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER"
+# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER"
 game_state = "TITLE"
 
 # --- Title screen menu state
@@ -97,7 +97,7 @@ current_line_index = 0
 revealed_chars = 0
 text_reveal_speed = 30
 last_reveal_time = 0
-next_state_after_dialogue = "DESERT_ROOM"
+next_state_after_dialogue = "ROOM"
 
 dialogue_backdrop_state = None
 
@@ -200,6 +200,16 @@ ice_flower_collected = False
 # --- Desert world & camera scrolling --------------------------------------
 DESERT_WORLD_WIDTH = 1600
 camera_x = 0
+
+# --- Room system (background/world width driven by whichever room is active) ---
+current_room = "desert"
+
+ROOM_CONFIG = {
+    "desert": {
+        "bg_color": DESERT_BG,
+        "world_width": DESERT_WORLD_WIDTH,
+    },
+}
 
 
 
@@ -312,7 +322,7 @@ DECOY_WEED_REACTION = "\"That one's just a common weed - no use to us. Keep look
 # --- Hearts / lives system (confirmed core system) ------------------------
 MAX_HEARTS = 3
 hearts = MAX_HEARTS
-checkpoint_state = "DESERT_ROOM"  # Only one checkpoint exists so far
+checkpoint_state = "ROOM"  # Only one checkpoint exists so far (desert)
 
 GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 
@@ -351,7 +361,7 @@ def activate_menu_option(option_name):
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
-        next_state_after_dialogue = "DESERT_ROOM"
+        next_state_after_dialogue = "ROOM"
         dialogue_backdrop_state = None
         dialogue_on_complete = "START_DESERT_INTRO"
         game_state = "DIALOGUE"
@@ -505,14 +515,15 @@ def start_desert_intro_dialogue():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     game_state = "DIALOGUE"
 
-def handle_desert_movement():
+def handle_room_movement():
     """
     Update the protagonist's position based on which movement keys are
-    currently held down (arrow keys or WASD).
+    currently held down (arrow keys or WASD), bounded by the current
+    room's world width rather than a hardcoded desert-only value.
     """
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -524,30 +535,35 @@ def handle_desert_movement():
     if keys[pygame.K_DOWN] or keys[pygame.K_s]:
         protagonist["y"] += PLAYER_SPEED
 
+    room_width = ROOM_CONFIG[current_room]["world_width"]
     half_size = PROTAGONIST_SIZE // 2
-    protagonist["x"] = max(half_size, min(DESERT_WORLD_WIDTH - half_size, protagonist["x"]))
+    protagonist["x"] = max(half_size, min(room_width - half_size, protagonist["x"]))
     protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
 
 
-def draw_desert_room():
+def draw_room():
     """
-    Draw the desert biome: a sandy background, the decoy flower (hidden
-    once eaten), the ice flower placeholder (hidden once collected), the
-    two ingredient flowers and decoy weed used by the potion checklist
-    puzzle (once it's active), the sprite companion, the protagonist, a
-    "Press E" interaction hint, and a fading movement-control hint.
+    Draw whichever biome is currently active (current_room): the shared
+    background/scaffolding (fill colour from ROOM_CONFIG, protagonist,
+    sprite companion, interaction hint, control hint) plus that room's
+    own one-off story elements. "desert" is still the only room that
+    exists, so this reads a little desert-specific for now - but a
+    future "swamp" branch can be added here without touching any of
+    the shared drawing/movement/camera code below.
     """
-    screen.fill(DESERT_BG)
+    screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
-    if not decoy_flower_eaten:
-        draw_decoy_flower_glow()
-        draw_decoy_flower()
-    if not ice_flower_collected:
-        if ice_flower_encountered:
-            draw_ice_flower_glow()
-        draw_ice_flower()
-    if checklist_visible:
-        draw_ingredient_flowers()
+    if current_room == "desert":
+        if not decoy_flower_eaten:
+            draw_decoy_flower_glow()
+            draw_decoy_flower()
+        if not ice_flower_collected:
+            if ice_flower_encountered:
+                draw_ice_flower_glow()
+            draw_ice_flower()
+        if checklist_visible:
+            draw_ingredient_flowers()
+
     draw_interaction_hint()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
@@ -579,14 +595,14 @@ def draw_control_hint():
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
-def handle_desert_room_input(event):
+def handle_room_input(event):
     """
-    Handle discrete (single-press) events while the desert room is active.
+    Handle discrete (single-press) events while the current room is active.
     """
     global game_state, paused_from_state, pause_selected_option
 
     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-        paused_from_state = "DESERT_ROOM"
+        paused_from_state = "ROOM"
         pause_selected_option = 0
         game_state = "PAUSED"
     
@@ -720,8 +736,8 @@ def check_decoy_flower_trigger():
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
-        next_state_after_dialogue = "DESERT_ROOM"
-        dialogue_backdrop_state = "DESERT_ROOM"
+        next_state_after_dialogue = "ROOM"
+        dialogue_backdrop_state = "ROOM"
         dialogue_on_complete = None
         sprite_state = "ENTERING"
         sprite_entrance_start_time = pygame.time.get_ticks()
@@ -805,11 +821,13 @@ def world_to_screen(world_x, world_y):
 
 def update_camera():
     """
-    Keep the camera roughly centred on the protagonist.
+    Keep the camera roughly centred on the protagonist, bounded by
+    whichever room's world width is currently active.
     """
     global camera_x
+    room_width = ROOM_CONFIG[current_room]["world_width"]
     target_camera_x = protagonist["x"] - SCREEN_WIDTH // 2
-    camera_x = max(0, min(DESERT_WORLD_WIDTH - SCREEN_WIDTH, target_camera_x))
+    camera_x = max(0, min(room_width - SCREEN_WIDTH, target_camera_x))
 
 
 def draw_ice_flower():
@@ -841,8 +859,8 @@ def check_ice_flower_trigger():
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
-        next_state_after_dialogue = "DESERT_ROOM"
-        dialogue_backdrop_state = "DESERT_ROOM"
+        next_state_after_dialogue = "ROOM"
+        dialogue_backdrop_state = "ROOM"
         dialogue_on_complete = None
         game_state = "DIALOGUE"
 
@@ -903,7 +921,7 @@ def draw_left_arrow_hint():
 def update_nearby_interactable():
     """
     Every frame, re-checks how close the protagonist currently is to each
-    interactable object in the desert room, and updates nearby_interactable
+    interactable object in the current room, and updates nearby_interactable
     to whichever single one (if any) is currently in range. The two
     ingredient flowers and the decoy weed only become interactable once
     the checklist is visible (i.e. after View 8's dialogue), so the
@@ -998,8 +1016,8 @@ def consume_decoy_flower():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = None
     game_state = "DIALOGUE"
 
@@ -1025,14 +1043,14 @@ def show_item_popup(title, description, icon_path=None):
     item_popup_title = title
     item_popup_description = description
     item_popup_icon_path = icon_path
-    previous_state_before_popup = "DESERT_ROOM"
+    previous_state_before_popup = "ROOM"
     game_state = "ITEM_POPUP"
 
 def draw_item_popup():
     """
     Draws the desert scene behind a centered popup box.
     """
-    draw_desert_room()
+    draw_room()
 
     box_rect = pygame.Rect(0, 0, 400, 220)
     box_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
@@ -1191,8 +1209,8 @@ def start_sprite_true_intro_dialogue():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = "SPRITE_CHOICE_1"
     game_state = "DIALOGUE"
 
@@ -1224,8 +1242,8 @@ def start_sprite_between_choices_dialogue():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = "SPRITE_CHOICE_2"
     game_state = "DIALOGUE"
 
@@ -1260,8 +1278,8 @@ def start_potion_recipe_intro_dialogue():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = None
     game_state = "DIALOGUE"
 
@@ -1303,8 +1321,8 @@ def resolve_dialogue_choice(index):
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = choice_on_complete
     game_state = "DIALOGUE"
 
@@ -1316,8 +1334,8 @@ def draw_dialogue_choice():
     """
     global choice_option_rects
 
-    if dialogue_backdrop_state == "DESERT_ROOM":
-        draw_desert_room()
+    if dialogue_backdrop_state == "ROOM":
+        draw_room()
     else:
         screen.fill(BARREN_BG)
 
@@ -1524,8 +1542,8 @@ def consume_ingredient_flower(which):
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = None
     game_state = "DIALOGUE"
 
@@ -1545,8 +1563,8 @@ def consume_decoy_weed():
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
-    next_state_after_dialogue = "DESERT_ROOM"
-    dialogue_backdrop_state = "DESERT_ROOM"
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = None
     game_state = "DIALOGUE"
 
@@ -1618,8 +1636,8 @@ while running:
             handle_dialogue_input(event)
         elif game_state == "DIALOGUE_CHOICE":
             handle_dialogue_choice_input(event)
-        elif game_state == "DESERT_ROOM":
-            handle_desert_room_input(event)
+        elif game_state == "ROOM":
+            handle_room_input(event)
         elif game_state == "ITEM_POPUP":
             handle_item_popup_input(event)
         elif game_state == "PAUSED":
@@ -1629,11 +1647,12 @@ while running:
         elif game_state == "GAME_OVER":
             handle_game_over_input(event)
 
-    if game_state == "DESERT_ROOM":
-        handle_desert_movement()
-        check_decoy_flower_trigger()
-        check_ice_flower_trigger()
+    if game_state == "ROOM":
+        handle_room_movement()
         update_nearby_interactable()
+        if current_room == "desert":
+            check_decoy_flower_trigger()
+            check_ice_flower_trigger()
 
     update_camera()
 
@@ -1642,7 +1661,7 @@ while running:
         update_sprite_animation()
         update_room_timer()
 
-    if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
+    if game_state == "ROOM" and previous_game_state != "ROOM":
         desert_hint_start_time = pygame.time.get_ticks()
         hp_bar_visible = True
         activate_heat_drain()
@@ -1652,8 +1671,8 @@ while running:
         draw_title_screen()
     elif game_state == "DIALOGUE":
         update_text_reveal()
-        if dialogue_backdrop_state == "DESERT_ROOM":
-            draw_desert_room()
+        if dialogue_backdrop_state == "ROOM":
+            draw_room()
         else:
             screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
@@ -1662,8 +1681,8 @@ while running:
         draw_text_box(current_line[:revealed_chars])
     elif game_state == "DIALOGUE_CHOICE":
         draw_dialogue_choice()
-    elif game_state == "DESERT_ROOM":
-        draw_desert_room()
+    elif game_state == "ROOM":
+        draw_room()
     elif game_state == "ITEM_POPUP":
         draw_item_popup()
     elif game_state == "PAUSED":
