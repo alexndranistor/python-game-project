@@ -204,7 +204,7 @@ ice_flower_collected = False
 
 # --- Desert world & camera scrolling --------------------------------------
 DESERT_WORLD_WIDTH = 1600
-SWAMP_WORLD_WIDTH = 1600
+SWAMP_WORLD_WIDTH = 1650  # Bumped up slightly so the bigger exit door has room to fit fully on-screen
 camera_x = 0
 
 # --- Room system (background/world width driven by whichever room is active) ---
@@ -423,6 +423,7 @@ BRIDGE_WIDTH = 24
 BRIDGE_TRIGGER_RADIUS = 80  # Bumped up from 60: while the bridge is unfixed, movement is clamped to 65px away from it, so 60 made it impossible to ever get within range
 BRIDGE_BROKEN_COLOR = (60, 50, 45)
 BRIDGE_FIXED_COLOR = (150, 110, 70)
+BRIDGE_GAP_HEIGHT = 120  # Height of the missing chunk in the middle of the unfixed bridge, so the background shows through it
 swamp_bridge_fixed = False
 TINKER_ITEM_1_NAME = "Rusty Cog"
 TINKER_ITEM_2_NAME = "Vine-Bound Plank"
@@ -454,10 +455,11 @@ BRIDGE_FIXED_TEXT = [
 # --- The Rat encounter & backstory (Commit 13) ---------------------------
 RAT_POS = (1450, 330)
 RAT_COLOR = (90, 80, 70)
-RAT_TRIGGER_RADIUS = 60
+RAT_TRIGGER_RADIUS = 140  # Tuned to match the distance at which he should notice the protagonist and start talking on his own, no E press needed
 rat_encountered = False
 rat_resolved = False
 rat_outcome = None  # None, "died", "bitter", or "helped"
+rat_facing = "right"  # "right" or "left" - flips his sprite horizontally to face the protagonist, then always mirrors her own facing while following
 RAT_FRIENDSHIP_LOW_THRESHOLD = 3   # at or below this -> lowest tier (he runs off and dies)
 RAT_FRIENDSHIP_HIGH_THRESHOLD = 8  # at or above this -> highest tier (healed and helping); between the two -> healed but bitter
 RAT_ENCOUNTER_TEXT = [
@@ -517,6 +519,8 @@ RAT_BETWEEN_CHOICES_3_TEXT = [
     "Sprite drifts a little closer, quiet for once. \"For what it's worth - the balance potion we've been carrying was actually meant for this. For healing things this swamp broke.\"",
     "The rat's good eye flicks toward you, then away again. \"...You'd waste that. On me.\"",
     "\"That depends,\" you say, \"on whether you'll actually let us.\"",
+    "\"...There's something you should know either way,\" he adds, quieter. \"Past here, there's a door. Whatever's rotting this whole swamp from the inside is holed up behind it, and it isn't going anywhere on its own.\"",
+    "\"I've tried facing it myself before. Once. That's half of why I look like this.\" He shakes his head. \"I'm not enough on my own. Whatever happens with us, that door's not staying shut forever.\"",
 ]
 RAT_CHOICE_4_OPTIONS = [
     "We're not leaving until you let us help. Please.",
@@ -553,9 +557,16 @@ RAT_OUTCOME_HELPED_TEXT = [
 RAT_FOLLOW_OFFSET = (-35, -35)
 rat_state = "HIDDEN"  # "HIDDEN" or "FOLLOWING"
 rat_draw_pos = [0, 0]
-DOOR_POS = (1550, 300)
-DOOR_TRIGGER_RADIUS = 60
+DOOR_POS = (1580, 300)
+DOOR_TRIGGER_RADIUS = 70
+DOOR_WIDTH = 110
+DOOR_HEIGHT = 260
 DOOR_COLOR = (40, 35, 30)
+DOOR_TRIM_COLOR = (90, 20, 20)
+DOOR_GLOW_COLOR = (220, 40, 40)
+DOOR_GLOW_MIN_RADIUS = 70
+DOOR_GLOW_MAX_RADIUS = 95
+DOOR_GLOW_PERIOD = 1400
 door_encountered = False
 SPRITE_FRIENDSHIP_HELP_THRESHOLD = 4  # sprite_friendship_level at or above this -> she helps in the final battle
 game_over_text_override = None
@@ -659,6 +670,15 @@ IMAGES = {
 IMAGES["protagonist_flipped"] = (
     pygame.transform.flip(IMAGES["protagonist"], True, False)
     if IMAGES["protagonist"] is not None
+    else None
+)
+
+# Same idea for the Rat: a pre-flipped copy so he can visibly turn to face
+# the protagonist when they first meet, then keep facing whichever way she
+# does while he's following her.
+IMAGES["rat_flipped"] = (
+    pygame.transform.flip(IMAGES["rat"], True, False)
+    if IMAGES["rat"] is not None
     else None
 )
 
@@ -1681,10 +1701,6 @@ def update_nearby_interactable():
             protagonist["y"] - TINKER_ITEM_2_POS[1],
         )
         bridge_distance = abs(protagonist["x"] - SWAMP_BRIDGE_X)
-        rat_distance = math.hypot(
-            protagonist["x"] - RAT_POS[0],
-            protagonist["y"] - RAT_POS[1],
-        )
         door_distance = math.hypot(
             protagonist["x"] - DOOR_POS[0],
             protagonist["y"] - DOOR_POS[1],
@@ -1708,8 +1724,6 @@ def update_nearby_interactable():
             nearby_interactable = "tinker_item_2"
         elif swamp_tinker_potion_brewed and not swamp_bridge_fixed and bridge_distance <= BRIDGE_TRIGGER_RADIUS:
             nearby_interactable = "bridge"
-        elif swamp_bridge_fixed and not rat_encountered and rat_distance <= RAT_TRIGGER_RADIUS:
-            nearby_interactable = "rat"
         elif rat_resolved and not door_encountered and door_distance <= DOOR_TRIGGER_RADIUS:
             nearby_interactable = "door"
         else:
@@ -1747,8 +1761,6 @@ def handle_interaction_key():
         consume_tinker_item(nearby_interactable)
     elif nearby_interactable == "bridge":
         repair_bridge()
-    elif nearby_interactable == "rat":
-        encounter_rat()
     elif nearby_interactable == "door":
         trigger_final_battle()
 
@@ -1845,7 +1857,6 @@ def draw_interaction_hint():
         "swamp_decoy_weed": SWAMP_DECOY_WEED_POS,
         "tinker_item_1": TINKER_ITEM_1_POS,
         "tinker_item_2": TINKER_ITEM_2_POS,
-        "rat": RAT_POS,
         "door": DOOR_POS,
     }
 
@@ -2402,14 +2413,35 @@ def draw_swamp_checklist():
 
 def draw_bridge():
     """
-    Draws the swamp's bridge as a vertical strip at SWAMP_BRIDGE_X,
-    coloured broken (dark, splintered-looking) until swamp_bridge_fixed
-    becomes True, at which point it switches to a solid fixed colour.
+    Draws the swamp's bridge as a vertical strip at SWAMP_BRIDGE_X. While
+    it's still broken, a chunk is left out of the middle so the swamp
+    background actually shows through the gap, rather than one solid
+    unbroken strip; a couple of jagged splinters poke into the gap so it
+    reads as broken wood. Once swamp_bridge_fixed becomes True, it's
+    drawn as one solid, continuous plank instead.
     """
     screen_x, _ = world_to_screen(SWAMP_BRIDGE_X, 0)
-    bridge_rect = pygame.Rect(int(screen_x - BRIDGE_WIDTH // 2), 0, BRIDGE_WIDTH, SCREEN_HEIGHT)
-    color = BRIDGE_FIXED_COLOR if swamp_bridge_fixed else BRIDGE_BROKEN_COLOR
-    pygame.draw.rect(screen, color, bridge_rect)
+    bridge_left = int(screen_x - BRIDGE_WIDTH // 2)
+
+    if swamp_bridge_fixed:
+        bridge_rect = pygame.Rect(bridge_left, 0, BRIDGE_WIDTH, SCREEN_HEIGHT)
+        pygame.draw.rect(screen, BRIDGE_FIXED_COLOR, bridge_rect)
+        return
+
+    gap_top = SCREEN_HEIGHT // 2 - BRIDGE_GAP_HEIGHT // 2
+    gap_bottom = gap_top + BRIDGE_GAP_HEIGHT
+    top_rect = pygame.Rect(bridge_left, 0, BRIDGE_WIDTH, gap_top)
+    bottom_rect = pygame.Rect(bridge_left, gap_bottom, BRIDGE_WIDTH, SCREEN_HEIGHT - gap_bottom)
+    pygame.draw.rect(screen, BRIDGE_BROKEN_COLOR, top_rect)
+    pygame.draw.rect(screen, BRIDGE_BROKEN_COLOR, bottom_rect)
+    pygame.draw.polygon(
+        screen, BRIDGE_BROKEN_COLOR,
+        [(bridge_left, gap_top), (bridge_left + BRIDGE_WIDTH // 2, gap_top + 18), (bridge_left, gap_top + 34)],
+    )
+    pygame.draw.polygon(
+        screen, BRIDGE_BROKEN_COLOR,
+        [(bridge_left + BRIDGE_WIDTH, gap_bottom), (bridge_left + BRIDGE_WIDTH // 2, gap_bottom - 18), (bridge_left + BRIDGE_WIDTH, gap_bottom - 34)],
+    )
 
 
 def draw_tinker_items():
@@ -2788,6 +2820,29 @@ def repair_bridge():
     game_state = "DIALOGUE"
 
 
+def check_rat_trigger():
+    """
+    Once the protagonist gets within RAT_TRIGGER_RADIUS of the Rat (the
+    same distance he should first notice her from), he immediately turns
+    to face her and his encounter dialogue starts on its own - no E press
+    needed for this first meeting, the same way the desert's decoy/ice
+    flowers already announce themselves. Only fires once, before he's
+    been encountered.
+    """
+    global rat_facing
+
+    if rat_encountered or not swamp_bridge_fixed:
+        return
+
+    distance = math.hypot(
+        protagonist["x"] - RAT_POS[0],
+        protagonist["y"] - RAT_POS[1],
+    )
+    if distance <= RAT_TRIGGER_RADIUS:
+        rat_facing = "left" if protagonist["x"] < RAT_POS[0] else "right"
+        encounter_rat()
+
+
 def encounter_rat():
     """
     Triggered the first time the player interacts with the Rat: plays
@@ -2972,20 +3027,26 @@ def draw_rat():
     he hasn't left the scene for good - gone if he ran off ("died") or
     limped away bitter after being healed ("bitter"). Once he's agreed
     to help ("helped"), he becomes a following companion instead, drawn
-    by draw_rat_companion() (Commit 14).
+    by draw_rat_companion() (Commit 14). Uses the pre-flipped image while
+    rat_facing is "left", so he visibly turns to face the protagonist the
+    moment they first meet.
     """
     if rat_outcome in ("died", "bitter"):
         return
-    draw_image_or_circle(IMAGES["rat"], RAT_POS, RAT_COLOR, 12)
+    rat_image = IMAGES["rat_flipped"] if rat_facing == "left" else IMAGES["rat"]
+    draw_image_or_circle(rat_image, RAT_POS, RAT_COLOR, 12)
 
 
 def draw_rat_companion():
     """
     Draws the Rat at his current follow position once he's agreed to
     join as a companion (Commit 14), the same way draw_sprite_character()
-    draws Sprite.
+    draws Sprite. Uses the pre-flipped image while rat_facing is "left",
+    kept in sync with the protagonist's own facing by
+    update_rat_companion_animation().
     """
-    draw_image_or_circle(IMAGES["rat"], rat_draw_pos, RAT_COLOR, 12)
+    rat_image = IMAGES["rat_flipped"] if rat_facing == "left" else IMAGES["rat"]
+    draw_image_or_circle(rat_image, rat_draw_pos, RAT_COLOR, 12)
 
 
 def start_rat_following():
@@ -3009,13 +3070,17 @@ def update_rat_companion_animation():
     Keeps the Rat's on-screen position locked to his follow offset from
     the protagonist, once he's joined as a companion. Simpler than
     Sprite's own animation, since he walks alongside you rather than
-    hovering.
+    hovering. Also keeps him always facing the same direction as the
+    protagonist while he's following her.
     """
-    global rat_draw_pos
+    global rat_draw_pos, rat_facing
+
     if rat_state != "FOLLOWING":
         return
+
     rat_draw_pos[0] = protagonist["x"] + RAT_FOLLOW_OFFSET[0]
     rat_draw_pos[1] = protagonist["y"] + RAT_FOLLOW_OFFSET[1]
+    rat_facing = protagonist_facing
 
 
 def start_swamp_room():
@@ -3038,12 +3103,28 @@ def start_swamp_room():
 def draw_door():
     """
     Draws the swamp's exit door once the Rat's encounter is resolved
-    (Commit 14), marking the way toward the final confrontation.
+    (Commit 14): a huge, mysterious-looking arched door with a slow,
+    pulsing red glow behind it so it reads as dangerous, marking the way
+    toward the final confrontation.
     """
     screen_x, screen_y = world_to_screen(*DOOR_POS)
-    door_rect = pygame.Rect(0, 0, 30, 70)
+
+    pulse_progress = (pygame.time.get_ticks() % DOOR_GLOW_PERIOD) / DOOR_GLOW_PERIOD
+    pulse = math.sin(pulse_progress * 2 * math.pi)
+    glow_radius = int(
+        DOOR_GLOW_MIN_RADIUS
+        + (pulse + 1) / 2 * (DOOR_GLOW_MAX_RADIUS - DOOR_GLOW_MIN_RADIUS)
+    )
+    glow_surface = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surface, (*DOOR_GLOW_COLOR, 90), (glow_radius, glow_radius), glow_radius)
+    glow_rect = glow_surface.get_rect(center=(int(screen_x), int(screen_y)))
+    screen.blit(glow_surface, glow_rect)
+
+    door_rect = pygame.Rect(0, 0, DOOR_WIDTH, DOOR_HEIGHT)
     door_rect.center = (int(screen_x), int(screen_y))
-    pygame.draw.rect(screen, DOOR_COLOR, door_rect)
+    pygame.draw.ellipse(screen, DOOR_COLOR, pygame.Rect(door_rect.x, door_rect.y - 22, DOOR_WIDTH, 44))
+    pygame.draw.rect(screen, DOOR_COLOR, door_rect, border_radius=16)
+    pygame.draw.rect(screen, DOOR_TRIM_COLOR, door_rect, 6, border_radius=16)
 
 
 def trigger_final_battle():
@@ -3108,7 +3189,7 @@ def resolve_final_battle():
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
-    dialogue_backdrop_state = "ROOM"
+    dialogue_backdrop_state = "BLACK"  # Stepping through the door leaves the swamp behind - just text on black from here, like the game's opening
     game_state = "DIALOGUE"
 
 
@@ -3189,7 +3270,7 @@ def reset_run_state():
     global hp_heal_popup_text, hp_damage_popup_text
     global rat_encountered, rat_resolved, rat_outcome
     global rat_state, rat_draw_pos, door_encountered, game_over_text_override
-    global protagonist_facing
+    global protagonist_facing, rat_facing
 
     hearts = MAX_HEARTS
     hp = MAX_HP
@@ -3235,6 +3316,7 @@ def reset_run_state():
     protagonist["x"] = 1200
     protagonist["y"] = SCREEN_HEIGHT // 2
     protagonist_facing = "right"
+    rat_facing = "right"
 
 
 def handle_game_over_input(event):
@@ -3341,6 +3423,8 @@ while running:
         if current_room == "desert":
             check_decoy_flower_trigger()
             check_ice_flower_trigger()
+        elif current_room == "swamp":
+            check_rat_trigger()
 
     update_camera()
 
@@ -3364,6 +3448,8 @@ while running:
         update_text_reveal()
         if dialogue_backdrop_state == "ROOM":
             draw_room()
+        elif dialogue_backdrop_state == "BLACK":
+            screen.fill(BLACK)
         else:
             screen.fill(BARREN_BG)
         current_line = dialogue_lines[current_line_index]
@@ -3385,7 +3471,9 @@ while running:
     elif game_state == "WIN":
         draw_win_screen()
 
-    if hp_bar_visible and game_state != "WIN":
+    hud_hidden_for_black_dialogue = game_state == "DIALOGUE" and dialogue_backdrop_state == "BLACK"
+
+    if hp_bar_visible and game_state != "WIN" and not hud_hidden_for_black_dialogue:
         draw_hp_bar()
         draw_hp_heal_popup()
         draw_hp_damage_popup()
@@ -3395,10 +3483,10 @@ while running:
         draw_checklist()
         draw_room_timer()
 
-    if swamp_checklist_visible and game_state != "WIN":
+    if swamp_checklist_visible and game_state != "WIN" and not hud_hidden_for_black_dialogue:
         draw_swamp_checklist()
 
-    if swamp_bridge_checklist_visible and game_state != "WIN":
+    if swamp_bridge_checklist_visible and game_state != "WIN" and not hud_hidden_for_black_dialogue:
         draw_swamp_bridge_checklist()
 
     pygame.display.flip()
