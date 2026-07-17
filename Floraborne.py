@@ -69,6 +69,7 @@ protagonist = {
     "x": 1200,
     "y": SCREEN_HEIGHT // 2,
 }
+protagonist_facing = "right"  # "right" or "left" - flips her sprite horizontally while walking left
 
 # --- Pause menu state ---------------------------------------------------
 pause_menu_options = ["Settings", "Save", "Quit Game"]
@@ -179,7 +180,7 @@ hp = MAX_HP
 heat_drain_active = False
 heat_immune = False
 last_hp_tick_time = 0
-HP_DRAIN_INTERVAL = 1000
+HP_DRAIN_INTERVAL = 700  # Bumped down from 1000 so the heat drains HP slightly quicker and feels more urgent
 HP_BAR_POS = (20, 20)
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
@@ -330,8 +331,11 @@ GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 WIN_TEXT = "You've crossed the swamp safely, potion in hand. Floraborne's balance is one step closer to being restored."
 
 # --- Room timer display (clock icon + repositioned "Time left" text) -----
-CLOCK_ICON_SIZE = 20
+CLOCK_ICON_SIZE = 36  # Bumped up so it reads clearly bigger than a single heart container icon
 TIME_LEFT_TEXT_COLOR = (255, 221, 130)
+
+# --- Heart container icon (replaces the old plain circle hearts) ---------
+HEART_ICON_SIZE = 24
 
 # --- Session statistics (global counters, per the project's code requirements) ---
 # Deliberately not reset by reset_run_state - these track the whole session,
@@ -646,7 +650,17 @@ IMAGES = {
     "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (32, 32)),
     "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (32, 32)),
     "clock": load_image_safe("assets/Clock.png", (CLOCK_ICON_SIZE, CLOCK_ICON_SIZE)),
+    "heart_container": load_image_safe("assets/heart_container.png", (HEART_ICON_SIZE, HEART_ICON_SIZE)),
 }
+
+# A pre-flipped copy of the protagonist sprite, used while she's walking
+# left so she visibly faces the direction she's actually moving instead of
+# always facing right.
+IMAGES["protagonist_flipped"] = (
+    pygame.transform.flip(IMAGES["protagonist"], True, False)
+    if IMAGES["protagonist"] is not None
+    else None
+)
 
 
 def draw_image_or_circle(image, world_pos, fallback_color, radius=12):
@@ -1090,13 +1104,19 @@ def handle_room_movement():
     currently held down (arrow keys or WASD), bounded by the current
     room's world width, and further clamped at the swamp's bridge until
     it's been repaired (Commit 12) so the player can't just walk across
-    the broken gap.
+    the broken gap. Also tracks protagonist_facing so her sprite can be
+    flipped horizontally in draw_room() while she's walking left, rather
+    than always facing right.
     """
+    global protagonist_facing
+
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         protagonist["x"] -= PLAYER_SPEED
+        protagonist_facing = "left"
     if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
         protagonist["x"] += PLAYER_SPEED
+        protagonist_facing = "right"
     if keys[pygame.K_UP] or keys[pygame.K_w]:
         protagonist["y"] -= PLAYER_SPEED
     if keys[pygame.K_DOWN] or keys[pygame.K_s]:
@@ -1151,8 +1171,9 @@ def draw_room():
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
     protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_HEIGHT)
     protagonist_rect.center = (int(protagonist_screen_x), int(protagonist_screen_y))
-    if IMAGES["protagonist"] is not None:
-        screen.blit(IMAGES["protagonist"], protagonist_rect)
+    protagonist_image = IMAGES["protagonist_flipped"] if protagonist_facing == "left" else IMAGES["protagonist"]
+    if protagonist_image is not None:
+        screen.blit(protagonist_image, protagonist_rect)
     else:
         pygame.draw.rect(screen, WHITE, protagonist_rect)
 
@@ -1397,8 +1418,8 @@ def activate_heat_drain():
 
 def update_heat_drain():
     """
-    Drain the protagonist's HP by 1 point per second while heat_drain_active
-    is True.
+    Drain the protagonist's HP by 1 point every HP_DRAIN_INTERVAL ms (now a
+    bit faster than once per second) while heat_drain_active is True.
     """
     global hp, last_hp_tick_time
 
@@ -1934,22 +1955,29 @@ def draw_hp_bar():
 
 def draw_hearts():
     """
-    Draws the player's remaining hearts (simple filled/outline circles)
-    below the HP bar and its numeric readout, with enough vertical
-    clearance below the HP text (computed from the font's own line size,
-    rather than a fixed guess) that the two never overlap.
+    Draws the player's remaining hearts using the heart_container image
+    (assets/heart_container.png) below the HP bar and its numeric
+    readout, with enough vertical clearance below the HP text (computed
+    from the font's own line size, rather than a fixed guess) that the
+    two never overlap. Lost hearts simply disappear now, instead of
+    showing an empty outline. Falls back to the original filled-circle
+    placeholder if the image hasn't been supplied yet.
     """
-    heart_radius = 8
+    heart_radius = HEART_ICON_SIZE // 2
     start_x = HP_BAR_POS[0] + heart_radius
     hp_text_bottom = HP_BAR_POS[1] + HP_BAR_HEIGHT + 4 + hint_font.get_linesize()
     start_y = hp_text_bottom + heart_radius + 10
 
     for i in range(MAX_HEARTS):
-        center = (start_x + i * (heart_radius * 2 + 6), start_y)
-        if i < hearts:
-            pygame.draw.circle(screen, (231, 76, 60), center, heart_radius)
+        if i >= hearts:
+            continue
+
+        center = (start_x + i * (HEART_ICON_SIZE + 6), start_y)
+        if IMAGES["heart_container"] is not None:
+            heart_rect = IMAGES["heart_container"].get_rect(center=center)
+            screen.blit(IMAGES["heart_container"], heart_rect)
         else:
-            pygame.draw.circle(screen, (231, 76, 60), center, heart_radius, 2)
+            pygame.draw.circle(screen, (231, 76, 60), center, heart_radius)
 
 def show_hp_heal_popup(amount_healed):
     """
@@ -2462,22 +2490,24 @@ def update_room_timer():
 
 def draw_room_timer():
     """
-    Draws a small clock icon with the remaining seconds underneath it,
-    positioned below the 3 heart containers under the HP bar (instead of
-    up by the checklist, where it was easy to miss). Turns red once time
-    is running low (10 seconds or less) as an urgency cue, and otherwise
-    uses a warm, non-white colour so it actually stands out against the
-    background. Falls back to just the text, with no icon, if
-    assets/Clock.png hasn't been supplied yet.
+    Draws a clock icon with the remaining seconds underneath it, centered
+    directly beneath the middle heart container (rather than the middle
+    of the whole HP bar) and sized comfortably bigger than a single
+    heart icon so it reads clearly as its own element. Turns red once
+    time is running low (10 seconds or less) as an urgency cue, and
+    otherwise uses a warm, non-white colour so it actually stands out
+    against the background. Falls back to just the text, with no icon,
+    if assets/Clock.png hasn't been supplied yet.
     """
     elapsed = pygame.time.get_ticks() - room_timer_start_time
     seconds_left = max(0, (ROOM_TIMER_DURATION_MS - elapsed) // 1000 + 1)
     color = HP_BAR_COLOR_LOW if seconds_left <= 10 else TIME_LEFT_TEXT_COLOR
 
-    heart_radius = 8
+    heart_radius = HEART_ICON_SIZE // 2
+    start_x = HP_BAR_POS[0] + heart_radius
     hp_text_bottom = HP_BAR_POS[1] + HP_BAR_HEIGHT + 4 + hint_font.get_linesize()
     hearts_bottom = hp_text_bottom + heart_radius + 10 + heart_radius
-    center_x = HP_BAR_POS[0] + HP_BAR_WIDTH // 2
+    center_x = start_x + 1 * (HEART_ICON_SIZE + 6)  # Directly under the middle (2nd of 3) heart container
     content_top = hearts_bottom + 12
 
     if IMAGES["clock"] is not None:
@@ -3159,6 +3189,7 @@ def reset_run_state():
     global hp_heal_popup_text, hp_damage_popup_text
     global rat_encountered, rat_resolved, rat_outcome
     global rat_state, rat_draw_pos, door_encountered, game_over_text_override
+    global protagonist_facing
 
     hearts = MAX_HEARTS
     hp = MAX_HP
@@ -3203,6 +3234,7 @@ def reset_run_state():
     game_over_text_override = None
     protagonist["x"] = 1200
     protagonist["y"] = SCREEN_HEIGHT // 2
+    protagonist_facing = "right"
 
 
 def handle_game_over_input(event):
