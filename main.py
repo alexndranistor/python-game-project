@@ -339,10 +339,85 @@ checkpoint_state = "ROOM"  # Only one checkpoint exists so far (desert)
 GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 WIN_TEXT = "You've crossed the swamp safely, potion in hand. Floraborne's balance is one step closer to being restored."
 
+# --- Session statistics (global counters, per the project's code requirements) ---
+# Deliberately not reset by reset_run_state - these track the whole session,
+# not just the current attempt.
+games_played = 0
+total_deaths = 0
+total_wins = 0
+fastest_win_time_ms = None
+last_run_time_ms = 0
+run_start_time = 0
+
+# --- Swamp ingredient puzzle (Commit 11) ---------------------------------
+SWAMP_CHECKLIST_POS = CHECKLIST_POS  # Reuses the same on-screen slot as the desert checklist, since only one is ever visible at a time
+SWAMP_INGREDIENT_FLOWER_1_NAME = "Marshglow Lily"
+SWAMP_INGREDIENT_FLOWER_2_NAME = "Bogroot Bell"
+SWAMP_INGREDIENT_FLOWER_3_NAME = "Mistpetal Reed"
+SWAMP_INGREDIENT_FLOWER_1_POS = (250, 180)
+SWAMP_INGREDIENT_FLOWER_2_POS = (600, 480)
+SWAMP_INGREDIENT_FLOWER_3_POS = (980, 220)
+SWAMP_INGREDIENT_WITHERED_COLOR = (90, 100, 70)
+SWAMP_INGREDIENT_BLOOMED_COLOR = (200, 150, 220)
+
+swamp_checklist_visible = False
+swamp_potion_brewed = False
+swamp_ingredient_flower_1_collected = False
+swamp_ingredient_flower_2_collected = False
+swamp_ingredient_flower_3_collected = False
+
+# --- Swamp harmful decoys: some now cost HP instead of doing nothing ----
+SWAMP_HARMFUL_HP_LOSS = 25
+SWAMP_HARMFUL_FLOWER_NAME = "Blistercap Bloom"
+SWAMP_HARMFUL_WEED_NAME = "Stingmoss Tangle"
+SWAMP_HARMFUL_FLOWER_POS = (420, 320)
+SWAMP_HARMFUL_WEED_POS = (800, 400)
+SWAMP_HARMFUL_COLOR = (170, 40, 40)
+swamp_harmful_flower_eaten = False
+swamp_harmful_weed_eaten = False
+
+SWAMP_DECOY_WEED_POS = (150, 450)
+SWAMP_DECOY_WEED_COLOR = (80, 90, 60)
+swamp_decoy_weed_eaten = False
+
+SWAMP_HARMFUL_FLOWER_REACTION_DESC = (
+    "A lurid, blistered bloom that looks almost too vivid to be safe - because "
+    "it isn't. Eating it raw burns on the way down and costs you HP. Whatever "
+    "it's good for, it isn't this."
+)
+SWAMP_HARMFUL_WEED_REACTION_DESC = (
+    "A tangle of stinging moss disguised as an ordinary weed. It bites back "
+    "the moment you swallow it, costing you HP for the trouble."
+)
+SWAMP_DECOY_WEED_REACTION = "\"That one's just a bit of ordinary swamp weed - no use to us. Keep looking.\""
+SWAMP_INGREDIENT_WATERED_REACTION = "Sprite's light dips toward the flower, and it blooms back to life just like the others. One more down!"
+
+# --- HP damage popup (mirrors the existing heal popup, but for harm) -----
+HP_DAMAGE_POPUP_COLOR = "#E74C3C"
+hp_damage_popup_text = None
+hp_damage_popup_start_time = 0
+HP_DAMAGE_POPUP_DURATION_MS = 1500
+
+SWAMP_ENTRY_TEXT = [
+    "The moment you step onto the mud, Sprite's glow dims slightly, like even she's uneasy here.",
+    "\"Alright. That anti-poison potion is the only reason either of us is still breathing in this fog - but breathing isn't the same as getting through.\"",
+    "\"If we actually want to cross this place and start putting Floraborne's balance back together, we're going to need something stronger. A real potion - and this one needs three ingredients, not two.\"",
+    "A checklist flickers into view - three flowers, all unticked.",
+    "\"This swamp isn't going to make it easy, either. Some of what's growing out here isn't just useless - a few of them will actively hurt you if you're careless enough to eat them raw. Look properly before you go grabbing anything.\"",
+]
+
+SWAMP_POTION_BREWED_TEXT = [
+    "\"That's all three - let's get this potion mixed properly this time.\"",
+    "A moment later, it's done: something for genuinely restoring balance, not just neutralizing poison.",
+    "\"Now we just need to find our way across... that bridge up ahead isn't going to fix itself.\"",
+]
+
 def draw_title_screen():
     """
     the game's title text and the New Game / Quit
-    menu, highlighting whichever option is currently selected.
+    menu, highlighting whichever option is currently selected. Also
+    shows this session's running statistics (games played and wins)
+    underneath the menu once at least one game has been played.
     """
     global menu_option_rects
     screen.fill(BARREN_BG)
@@ -359,17 +434,30 @@ def draw_title_screen():
         screen.blit(option_surface, option_rect)
         menu_option_rects.append(option_rect)
 
+    if games_played > 0:
+        stats_surface = hint_font.render(
+            f"Games played: {games_played}   Wins: {total_wins}", True, (180, 180, 180)
+        )
+        stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+        screen.blit(stats_surface, stats_rect)
+
 
 def activate_menu_option(option_name):
     """
     Perform whatever should happen when a title-screen menu option is
-    chosen, whether by keyboard (Enter) or mouse click.
+    chosen, whether by keyboard (Enter) or mouse click. Choosing "New
+    Game" also counts as one more played game for the session's
+    statistics, and starts this run's own timer (used for the win
+    screen's "time taken" and the session's fastest-win tracking).
     """
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
     global dialogue_backdrop_state, dialogue_on_complete
+    global games_played, run_start_time
 
     if option_name == "New Game":
+        games_played += 1
+        run_start_time = pygame.time.get_ticks()
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
@@ -470,13 +558,12 @@ def handle_dialogue_input(event):
     """
     Handle player input while a dialogue text box is active. Both
     pressing Enter/Space and left-clicking the mouse advance the dialogue.
-    While playing through the potion recipe intro (View 8), the
-    ingredient checklist pops in the instant the dialogue reaches the
-    line that mentions it, rather than waiting for the whole
-    conversation to finish. On the final line, dialogue_on_complete
-    decides what happens next: it either chains straight into another
-    dialogue, switches rooms, or simply switches to next_state_after_dialogue
-    as normal.
+    Two dialogues reveal their checklist mid-conversation rather than
+    waiting for the whole thing to finish: the potion recipe intro
+    (desert, View 8) and the swamp's entry dialogue (Commit 11). On the
+    final line, dialogue_on_complete decides what happens next: it either
+    chains straight into another dialogue, switches rooms, or simply
+    switches to next_state_after_dialogue as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -496,6 +583,8 @@ def handle_dialogue_input(event):
 
             if dialogue_lines is POTION_RECIPE_INTRO_TEXT and current_line_index == 3 and not checklist_visible:
                 show_ingredient_checklist()
+            elif dialogue_lines is SWAMP_ENTRY_TEXT and current_line_index == 3 and not swamp_checklist_visible:
+                show_swamp_checklist()
 
             if current_line_index >= len(dialogue_lines):
                 if dialogue_on_complete == "START_DESERT_INTRO":
@@ -516,10 +605,42 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "START_SWAMP_ROOM":
                     dialogue_on_complete = None
                     start_swamp_room()
-                    game_state = next_state_after_dialogue
+                    start_swamp_entry_dialogue()
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
+
+
+def start_swamp_entry_dialogue():
+    """
+    Plays the swamp's entry dialogue (Commit 11): Sprite explains that
+    crossing this area for real requires a stronger, three-ingredient
+    potion, and warns that some of what's growing here is actively
+    harmful. The checklist for this potion pops in mid-dialogue, handled
+    in handle_dialogue_input, the same way the desert's did.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = SWAMP_ENTRY_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def show_swamp_checklist():
+    """
+    Makes the swamp's 3-ingredient checklist visible. Called the instant
+    the swamp entry dialogue reaches the line about it appearing (see
+    handle_dialogue_input). Unlike the desert's checklist, this one has
+    no countdown timer.
+    """
+    global swamp_checklist_visible
+    swamp_checklist_visible = True
 
 
 def start_desert_intro_dialogue():
@@ -564,10 +685,9 @@ def draw_room():
     Draw whichever biome is currently active (current_room): the shared
     background/scaffolding (fill colour from ROOM_CONFIG, protagonist,
     sprite companion, interaction hint, control hint) plus that room's
-    own one-off story elements. Right now that's the desert's decoy
-    flower, ice flower, and ingredient checklist; the swamp has no
-    room-specific elements of its own, so this branch is simply skipped
-    while current_room == "swamp".
+    own one-off story elements. That's the desert's decoy flower, ice
+    flower, and ingredient checklist puzzle, or the swamp's own
+    3-ingredient puzzle and harmful decoys (Commit 11).
     """
     screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
@@ -581,6 +701,9 @@ def draw_room():
             draw_ice_flower()
         if checklist_visible:
             draw_ingredient_flowers()
+    elif current_room == "swamp":
+        if swamp_checklist_visible:
+            draw_swamp_flowers()
 
     draw_interaction_hint()
 
@@ -801,6 +924,27 @@ def update_heat_drain():
         last_hp_tick_time = current_time
 
 
+def handle_hp_depleted():
+    """
+    Runs the moment the desert heat drains HP to 0: costs 1 heart and
+    respawns at the last checkpoint with HP restored, the same way
+    running out of time on the ingredient timer already does. Losing
+    the final heart triggers the game-over screen instead. Every heart
+    lost also counts toward this session's total_deaths statistic.
+    """
+    global hearts, hp, game_state, total_deaths
+
+    hearts -= 1
+    hp = MAX_HP
+    total_deaths += 1
+
+    if hearts <= 0:
+        game_state = "GAME_OVER"
+    else:
+        game_state = checkpoint_state
+        activate_heat_drain()
+
+
 def update_sprite_animation():
     """
     Update the sprite companion's on-screen position.
@@ -940,44 +1084,90 @@ def update_nearby_interactable():
     """
     Every frame, re-checks how close the protagonist currently is to each
     interactable object in the current room, and updates nearby_interactable
-    to whichever single one (if any) is currently in range. The two
-    ingredient flowers and the decoy weed only become interactable once
-    the checklist is visible (i.e. after View 8's dialogue), so the
-    player can't accidentally trigger the potion puzzle before it exists.
+    to whichever single one (if any) is currently in range. The desert's
+    ingredient flowers and decoy weed only become interactable once its
+    checklist is visible; the swamp's three ingredient flowers, its two
+    harmful decoys, and its harmless decoy weed only become interactable
+    once its own checklist is visible (Commit 11).
     """
     global nearby_interactable
 
-    ice_distance = math.hypot(
-        protagonist["x"] - ICE_FLOWER_POS[0],
-        protagonist["y"] - ICE_FLOWER_POS[1],
-    )
-    decoy_distance = math.hypot(
-        protagonist["x"] - DECOY_FLOWER_POS[0],
-        protagonist["y"] - DECOY_FLOWER_POS[1],
-    )
-    ingredient_1_distance = math.hypot(
-        protagonist["x"] - INGREDIENT_FLOWER_1_POS[0],
-        protagonist["y"] - INGREDIENT_FLOWER_1_POS[1],
-    )
-    ingredient_2_distance = math.hypot(
-        protagonist["x"] - INGREDIENT_FLOWER_2_POS[0],
-        protagonist["y"] - INGREDIENT_FLOWER_2_POS[1],
-    )
-    decoy_weed_distance = math.hypot(
-        protagonist["x"] - DECOY_WEED_POS[0],
-        protagonist["y"] - DECOY_WEED_POS[1],
-    )
+    if current_room == "desert":
+        ice_distance = math.hypot(
+            protagonist["x"] - ICE_FLOWER_POS[0],
+            protagonist["y"] - ICE_FLOWER_POS[1],
+        )
+        decoy_distance = math.hypot(
+            protagonist["x"] - DECOY_FLOWER_POS[0],
+            protagonist["y"] - DECOY_FLOWER_POS[1],
+        )
+        ingredient_1_distance = math.hypot(
+            protagonist["x"] - INGREDIENT_FLOWER_1_POS[0],
+            protagonist["y"] - INGREDIENT_FLOWER_1_POS[1],
+        )
+        ingredient_2_distance = math.hypot(
+            protagonist["x"] - INGREDIENT_FLOWER_2_POS[0],
+            protagonist["y"] - INGREDIENT_FLOWER_2_POS[1],
+        )
+        decoy_weed_distance = math.hypot(
+            protagonist["x"] - DECOY_WEED_POS[0],
+            protagonist["y"] - DECOY_WEED_POS[1],
+        )
 
-    if ice_flower_encountered and not ice_flower_collected and ice_distance <= ICE_FLOWER_TRIGGER_RADIUS:
-        nearby_interactable = "ice_flower"
-    elif not decoy_flower_eaten and decoy_distance <= DECOY_FLOWER_RADIUS:
-        nearby_interactable = "decoy_flower"
-    elif checklist_visible and not ingredient_flower_1_collected and ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
-        nearby_interactable = "ingredient_flower_1"
-    elif checklist_visible and not ingredient_flower_2_collected and ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
-        nearby_interactable = "ingredient_flower_2"
-    elif checklist_visible and not decoy_weed_interacted and decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
-        nearby_interactable = "decoy_weed"
+        if ice_flower_encountered and not ice_flower_collected and ice_distance <= ICE_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "ice_flower"
+        elif not decoy_flower_eaten and decoy_distance <= DECOY_FLOWER_RADIUS:
+            nearby_interactable = "decoy_flower"
+        elif checklist_visible and not ingredient_flower_1_collected and ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "ingredient_flower_1"
+        elif checklist_visible and not ingredient_flower_2_collected and ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "ingredient_flower_2"
+        elif checklist_visible and not decoy_weed_interacted and decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
+            nearby_interactable = "decoy_weed"
+        else:
+            nearby_interactable = None
+
+    elif current_room == "swamp":
+        swamp_ingredient_1_distance = math.hypot(
+            protagonist["x"] - SWAMP_INGREDIENT_FLOWER_1_POS[0],
+            protagonist["y"] - SWAMP_INGREDIENT_FLOWER_1_POS[1],
+        )
+        swamp_ingredient_2_distance = math.hypot(
+            protagonist["x"] - SWAMP_INGREDIENT_FLOWER_2_POS[0],
+            protagonist["y"] - SWAMP_INGREDIENT_FLOWER_2_POS[1],
+        )
+        swamp_ingredient_3_distance = math.hypot(
+            protagonist["x"] - SWAMP_INGREDIENT_FLOWER_3_POS[0],
+            protagonist["y"] - SWAMP_INGREDIENT_FLOWER_3_POS[1],
+        )
+        swamp_harmful_flower_distance = math.hypot(
+            protagonist["x"] - SWAMP_HARMFUL_FLOWER_POS[0],
+            protagonist["y"] - SWAMP_HARMFUL_FLOWER_POS[1],
+        )
+        swamp_harmful_weed_distance = math.hypot(
+            protagonist["x"] - SWAMP_HARMFUL_WEED_POS[0],
+            protagonist["y"] - SWAMP_HARMFUL_WEED_POS[1],
+        )
+        swamp_decoy_weed_distance = math.hypot(
+            protagonist["x"] - SWAMP_DECOY_WEED_POS[0],
+            protagonist["y"] - SWAMP_DECOY_WEED_POS[1],
+        )
+
+        if swamp_checklist_visible and not swamp_ingredient_flower_1_collected and swamp_ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_ingredient_flower_1"
+        elif swamp_checklist_visible and not swamp_ingredient_flower_2_collected and swamp_ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_ingredient_flower_2"
+        elif swamp_checklist_visible and not swamp_ingredient_flower_3_collected and swamp_ingredient_3_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_ingredient_flower_3"
+        elif swamp_checklist_visible and not swamp_harmful_flower_eaten and swamp_harmful_flower_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_harmful_flower"
+        elif swamp_checklist_visible and not swamp_harmful_weed_eaten and swamp_harmful_weed_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_harmful_weed"
+        elif swamp_checklist_visible and not swamp_decoy_weed_eaten and swamp_decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
+            nearby_interactable = "swamp_decoy_weed"
+        else:
+            nearby_interactable = None
+
     else:
         nearby_interactable = None
 
@@ -996,6 +1186,14 @@ def handle_interaction_key():
         consume_ingredient_flower("ingredient_flower_2")
     elif nearby_interactable == "decoy_weed":
         consume_decoy_weed()
+    elif nearby_interactable in ("swamp_ingredient_flower_1", "swamp_ingredient_flower_2", "swamp_ingredient_flower_3"):
+        consume_swamp_ingredient_flower(nearby_interactable)
+    elif nearby_interactable == "swamp_harmful_flower":
+        consume_swamp_harmful_flower()
+    elif nearby_interactable == "swamp_harmful_weed":
+        consume_swamp_harmful_weed()
+    elif nearby_interactable == "swamp_decoy_weed":
+        consume_swamp_decoy_weed()
 
 def consume_ice_flower():
     """
@@ -1205,6 +1403,39 @@ def draw_hp_heal_popup():
 
     popup_surface = render_outlined_text(
         hp_heal_popup_text, hint_font, pygame.Color(HP_HEAL_POPUP_COLOR), BLACK
+    )
+    sprite_screen_x, sprite_screen_y = world_to_screen(sprite_draw_pos[0], sprite_draw_pos[1])
+    popup_rect = popup_surface.get_rect(
+        center=(int(sprite_screen_x), int(sprite_screen_y) - SPRITE_CHAR_RADIUS - 20)
+    )
+    screen.blit(popup_surface, popup_rect)
+
+
+def show_hp_damage_popup(amount_lost):
+    """
+    Starts a short-lived floating "-<amount> HP" text callout, the same
+    way show_hp_heal_popup does for healing.
+    """
+    global hp_damage_popup_text, hp_damage_popup_start_time
+
+    hp_damage_popup_text = f"-{amount_lost} HP"
+    hp_damage_popup_start_time = pygame.time.get_ticks()
+
+
+def draw_hp_damage_popup():
+    """
+    Draws the floating "-25 HP" text while it's still within its display
+    duration, the same way draw_hp_heal_popup does for healing.
+    """
+    if hp_damage_popup_text is None:
+        return
+
+    elapsed = pygame.time.get_ticks() - hp_damage_popup_start_time
+    if elapsed > HP_DAMAGE_POPUP_DURATION_MS:
+        return
+
+    popup_surface = render_outlined_text(
+        hp_damage_popup_text, hint_font, pygame.Color(HP_DAMAGE_POPUP_COLOR), BLACK
     )
     sprite_screen_x, sprite_screen_y = world_to_screen(sprite_draw_pos[0], sprite_draw_pos[1])
     popup_rect = popup_surface.get_rect(
@@ -1459,6 +1690,76 @@ def draw_checklist():
         screen.blit(text_surface, text_rect)
 
 
+def draw_swamp_flowers():
+    """
+    Draws the swamp's 3 real ingredient flowers (withered until
+    collected), the 2 harmful decoys (a flower and a weed that cost HP
+    if eaten), and the 1 harmless decoy weed - each only for as long as
+    it's still uncollected/uninteracted with.
+    """
+    ingredient_positions_and_flags = [
+        (SWAMP_INGREDIENT_FLOWER_1_POS, swamp_ingredient_flower_1_collected),
+        (SWAMP_INGREDIENT_FLOWER_2_POS, swamp_ingredient_flower_2_collected),
+        (SWAMP_INGREDIENT_FLOWER_3_POS, swamp_ingredient_flower_3_collected),
+    ]
+    for position, collected in ingredient_positions_and_flags:
+        if not collected:
+            screen_x, screen_y = world_to_screen(*position)
+            pygame.draw.circle(screen, SWAMP_INGREDIENT_WITHERED_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not swamp_harmful_flower_eaten:
+        screen_x, screen_y = world_to_screen(*SWAMP_HARMFUL_FLOWER_POS)
+        pygame.draw.circle(screen, SWAMP_HARMFUL_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not swamp_harmful_weed_eaten:
+        screen_x, screen_y = world_to_screen(*SWAMP_HARMFUL_WEED_POS)
+        pygame.draw.circle(screen, SWAMP_HARMFUL_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not swamp_decoy_weed_eaten:
+        screen_x, screen_y = world_to_screen(*SWAMP_DECOY_WEED_POS)
+        pygame.draw.circle(screen, SWAMP_DECOY_WEED_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
+def draw_swamp_checklist():
+    """
+    Draws the swamp's own 3-item checklist, in the same on-screen slot
+    the desert's checklist used (only one of the two is ever visible at
+    once, since the desert's is hidden by start_swamp_room before this
+    one appears).
+    """
+    checklist_x, checklist_y = SWAMP_CHECKLIST_POS
+    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 3)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect)
+    pygame.draw.rect(screen, BLACK, box_rect, 2)
+
+    checklist_items = [
+        (SWAMP_INGREDIENT_FLOWER_1_NAME, swamp_ingredient_flower_1_collected),
+        (SWAMP_INGREDIENT_FLOWER_2_NAME, swamp_ingredient_flower_2_collected),
+        (SWAMP_INGREDIENT_FLOWER_3_NAME, swamp_ingredient_flower_3_collected),
+    ]
+    for i, (name, collected) in enumerate(checklist_items):
+        line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
+        checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
+        if collected:
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.left + 2, checkbox_rect.centery),
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                2,
+            )
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                (checkbox_rect.right - 1, checkbox_rect.top + 2),
+                2,
+            )
+
+        text_surface = hint_font.render(name, True, BLACK)
+        text_rect = text_surface.get_rect(topleft=(checkbox_rect.right + 8, line_y))
+        screen.blit(text_surface, text_rect)
+
+
 def start_room_timer():
     """
     Starts (or restarts) the 90-second room timer, used for the desert's
@@ -1506,12 +1807,14 @@ def handle_room_timer_expired():
     exists so far, "respawning" currently just means restarting the
     timer rather than losing any already-collected ingredients - once
     more checkpoints exist, this is where that logic will expand.
-    Losing the final heart triggers the game-over screen instead.
+    Losing the final heart triggers the game-over screen instead. Every
+    heart lost also counts toward this session's total_deaths statistic.
     """
-    global hearts, room_timer_active, game_state
+    global hearts, room_timer_active, game_state, total_deaths
 
     room_timer_active = False
     hearts -= 1
+    total_deaths += 1
 
     if hearts <= 0:
         game_state = "GAME_OVER"
@@ -1591,6 +1894,115 @@ def consume_decoy_weed():
     game_state = "DIALOGUE"
 
 
+def consume_swamp_ingredient_flower(which):
+    """
+    Waters and collects one of the swamp's three real ingredient flowers:
+    ticks it off the swamp checklist and plays Sprite's short reaction
+    line. If this was the last of the three needed, chains into the
+    swamp potion-brewed dialogue instead of the normal reaction line, and
+    hides the checklist since the potion is done.
+
+    Args:
+        which (str): "swamp_ingredient_flower_1", "_2", or "_3".
+    """
+    global swamp_ingredient_flower_1_collected, swamp_ingredient_flower_2_collected
+    global swamp_ingredient_flower_3_collected, swamp_potion_brewed, swamp_checklist_visible
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if which == "swamp_ingredient_flower_1":
+        swamp_ingredient_flower_1_collected = True
+    elif which == "swamp_ingredient_flower_2":
+        swamp_ingredient_flower_2_collected = True
+    elif which == "swamp_ingredient_flower_3":
+        swamp_ingredient_flower_3_collected = True
+
+    all_collected = (
+        swamp_ingredient_flower_1_collected
+        and swamp_ingredient_flower_2_collected
+        and swamp_ingredient_flower_3_collected
+    )
+
+    if all_collected:
+        swamp_potion_brewed = True
+        swamp_checklist_visible = False
+        dialogue_lines = SWAMP_POTION_BREWED_TEXT
+    else:
+        dialogue_lines = [SWAMP_INGREDIENT_WATERED_REACTION]
+
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def consume_swamp_harmful_flower():
+    """
+    Eating the swamp's harmful decoy flower costs HP (floored at 0) and
+    opens the item popup warning that it was dangerous to eat raw. Only
+    happens once - the flower disappears from the room afterwards.
+    """
+    global swamp_harmful_flower_eaten, hp
+
+    if swamp_harmful_flower_eaten:
+        return
+
+    swamp_harmful_flower_eaten = True
+    hp = max(0, hp - SWAMP_HARMFUL_HP_LOSS)
+    show_hp_damage_popup(SWAMP_HARMFUL_HP_LOSS)
+    show_item_popup(
+        title=SWAMP_HARMFUL_FLOWER_NAME,
+        description=SWAMP_HARMFUL_FLOWER_REACTION_DESC,
+        icon_path=None,
+    )
+
+
+def consume_swamp_harmful_weed():
+    """
+    Eating the swamp's harmful decoy weed costs HP (floored at 0) and
+    opens the item popup warning that it was dangerous to eat raw. Only
+    happens once - the weed disappears from the room afterwards.
+    """
+    global swamp_harmful_weed_eaten, hp
+
+    if swamp_harmful_weed_eaten:
+        return
+
+    swamp_harmful_weed_eaten = True
+    hp = max(0, hp - SWAMP_HARMFUL_HP_LOSS)
+    show_hp_damage_popup(SWAMP_HARMFUL_HP_LOSS)
+    show_item_popup(
+        title=SWAMP_HARMFUL_WEED_NAME,
+        description=SWAMP_HARMFUL_WEED_REACTION_DESC,
+        icon_path=None,
+    )
+
+
+def consume_swamp_decoy_weed():
+    """
+    Reaction to interacting with the swamp's harmless decoy weed: does
+    not affect the checklist or HP, just a short flavour line. Only
+    happens once.
+    """
+    global swamp_decoy_weed_eaten
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    swamp_decoy_weed_eaten = True
+
+    dialogue_lines = [SWAMP_DECOY_WEED_REACTION]
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
 def start_swamp_room():
     """
     Called once the potion-brewing transition dialogue finishes: switches
@@ -1611,12 +2023,17 @@ def start_swamp_room():
 def check_swamp_end_trigger():
     """
     Once the protagonist reaches the far right edge of the swamp, the
-    game is won.
+    game is won. Also updates this session's win statistics: total wins,
+    this run's time taken, and the fastest win time seen so far.
     """
-    global game_state
+    global game_state, total_wins, last_run_time_ms, fastest_win_time_ms
 
     if protagonist["x"] >= SWAMP_WORLD_WIDTH - PROTAGONIST_SIZE:
         game_state = "WIN"
+        total_wins += 1
+        last_run_time_ms = pygame.time.get_ticks() - run_start_time
+        if fastest_win_time_ms is None or last_run_time_ms < fastest_win_time_ms:
+            fastest_win_time_ms = last_run_time_ms
 
 
 def draw_game_over_screen():
@@ -1645,14 +2062,21 @@ def draw_game_over_screen():
 def reset_run_state():
     """
     Resets every run-specific counter and flag back to a fresh game's
-    starting values. Shared by the game-over screen and the win screen,
+    starting values, including the swamp's ingredient/decoy flags added
+    in Commit 11. Shared by the game-over screen and the win screen,
     since both send the player back to the title screen for a new attempt.
+    Session statistics (games_played, total_deaths, total_wins,
+    fastest_win_time_ms) are deliberately left untouched here.
     """
     global hearts, hp, sprite_friendship_level, rat_friendship_level
     global decoy_flower_eaten, ice_flower_collected, ice_flower_encountered
     global ingredient_flower_1_collected, ingredient_flower_2_collected, decoy_weed_interacted
     global checklist_visible, room_timer_active, heat_drain_active, heat_immune, hp_bar_visible
     global sprite_true_intro_played, sprite_state, current_room, camera_x
+    global swamp_checklist_visible, swamp_potion_brewed
+    global swamp_ingredient_flower_1_collected, swamp_ingredient_flower_2_collected, swamp_ingredient_flower_3_collected
+    global swamp_harmful_flower_eaten, swamp_harmful_weed_eaten, swamp_decoy_weed_eaten
+    global hp_heal_popup_text, hp_damage_popup_text
 
     hearts = MAX_HEARTS
     hp = MAX_HP
@@ -1673,6 +2097,16 @@ def reset_run_state():
     sprite_state = "HIDDEN"
     current_room = "desert"
     camera_x = 0
+    swamp_checklist_visible = False
+    swamp_potion_brewed = False
+    swamp_ingredient_flower_1_collected = False
+    swamp_ingredient_flower_2_collected = False
+    swamp_ingredient_flower_3_collected = False
+    swamp_harmful_flower_eaten = False
+    swamp_harmful_weed_eaten = False
+    swamp_decoy_weed_eaten = False
+    hp_heal_popup_text = None
+    hp_damage_popup_text = None
     protagonist["x"] = 1200
     protagonist["y"] = SCREEN_HEIGHT // 2
 
@@ -1704,7 +2138,9 @@ def handle_win_input(event):
 def draw_win_screen():
     """
     Draws the win screen shown once the protagonist crosses the swamp
-    safely, with the option to play again from the title screen.
+    safely, with the option to play again from the title screen. Also
+    shows this run's time taken alongside the session's fastest win and
+    total win count.
     """
     screen.fill((20, 45, 30))
 
@@ -1718,6 +2154,15 @@ def draw_win_screen():
         line_surface = dialogue_font.render(line, True, WHITE)
         line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + i * line_height))
         screen.blit(line_surface, line_rect)
+
+    stats_text = (
+        f"Time: {last_run_time_ms // 1000}s   "
+        f"Best: {fastest_win_time_ms // 1000}s   "
+        f"Total wins: {total_wins}"
+    )
+    stats_surface = hint_font.render(stats_text, True, (200, 200, 200))
+    stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + len(wrapped_lines) * line_height + 20))
+    screen.blit(stats_surface, stats_rect)
 
     hint_surface = hint_font.render("Press ENTER to play again", True, (180, 180, 180))
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
@@ -1761,6 +2206,8 @@ while running:
 
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP", "GAME_OVER", "WIN"):
         update_heat_drain()
+        if hp <= 0:
+            handle_hp_depleted()
         update_sprite_animation()
         update_room_timer()
 
@@ -1800,11 +2247,15 @@ while running:
     if hp_bar_visible and game_state != "WIN":
         draw_hp_bar()
         draw_hp_heal_popup()
+        draw_hp_damage_popup()
         draw_hearts()
 
     if checklist_visible and game_state != "WIN":
         draw_checklist()
         draw_room_timer()
+
+    if swamp_checklist_visible and game_state != "WIN":
+        draw_swamp_checklist()
 
     pygame.display.flip()
     clock.tick(60)
