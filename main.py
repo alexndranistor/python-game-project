@@ -200,7 +200,7 @@ ice_flower_collected = False
 
 # --- Desert world & camera scrolling --------------------------------------
 DESERT_WORLD_WIDTH = 1600
-SWAMP_WORLD_WIDTH = 1200
+SWAMP_WORLD_WIDTH = 1600
 camera_x = 0
 
 # --- Room system (background/world width driven by whichever room is active) ---
@@ -412,6 +412,45 @@ SWAMP_POTION_BREWED_TEXT = [
     "\"Now we just need to find our way across... that bridge up ahead isn't going to fix itself.\"",
 ]
 
+# --- Bridge repair puzzle (Commit 12) ------------------------------------
+SWAMP_BRIDGE_X = 1100
+BRIDGE_WIDTH = 24
+BRIDGE_TRIGGER_RADIUS = 60
+BRIDGE_BROKEN_COLOR = (60, 50, 45)
+BRIDGE_FIXED_COLOR = (150, 110, 70)
+swamp_bridge_fixed = False
+
+TINKER_ITEM_1_NAME = "Rusty Cog"
+TINKER_ITEM_2_NAME = "Vine-Bound Plank"
+TINKER_ITEM_1_POS = (1000, 200)
+TINKER_ITEM_2_POS = (1050, 480)
+TINKER_ITEM_COLOR = (140, 140, 150)
+tinker_item_1_collected = False
+tinker_item_2_collected = False
+swamp_bridge_checklist_visible = False
+swamp_tinker_potion_brewed = False
+
+TINKER_ITEM_COLLECTED_REACTION = "Sprite scoops the piece up in a flicker of light and tucks it away. \"That's one - just need the other.\""
+
+BRIDGE_INTRO_TEXT = [
+    "Sprite hovers toward the broken bridge ahead, her light dimming at the sight of it.",
+    "\"That's... not going to hold anyone's weight like that. We need something to patch it up properly - a tinkering potion, this time, not another ingredient brew.\"",
+    "\"I've seen scraps of exactly the kind of thing we'd need scattered around here - some old metal, something sturdy enough to bind it.\"",
+    "A checklist flickers into view - two scavenged parts, both unticked.",
+    "\"Go on then. Two pieces should do it.\"",
+]
+
+TINKER_POTION_BREWED_TEXT = [
+    "\"That's both pieces - let's get this tinkering potion mixed.\"",
+    "A moment later, it's done: something to hold rusted metal and old wood together like it was never broken.",
+    "\"Now, let's go patch up that bridge.\"",
+]
+
+BRIDGE_FIXED_TEXT = [
+    "A few taps with the tinkering potion, and the planks knit themselves back together, solid as new.",
+    "\"There - that ought to hold. Let's keep moving.\"",
+]
+
 def draw_title_screen():
     """
     the game's title text and the New Game / Quit
@@ -558,12 +597,13 @@ def handle_dialogue_input(event):
     """
     Handle player input while a dialogue text box is active. Both
     pressing Enter/Space and left-clicking the mouse advance the dialogue.
-    Two dialogues reveal their checklist mid-conversation rather than
+    Three dialogues reveal their checklist mid-conversation rather than
     waiting for the whole thing to finish: the potion recipe intro
-    (desert, View 8) and the swamp's entry dialogue (Commit 11). On the
-    final line, dialogue_on_complete decides what happens next: it either
-    chains straight into another dialogue, switches rooms, or simply
-    switches to next_state_after_dialogue as normal.
+    (desert, View 8), the swamp's entry dialogue (Commit 11), and the
+    bridge-intro dialogue (Commit 12). On the final line,
+    dialogue_on_complete decides what happens next: it either chains
+    straight into another dialogue, switches rooms, or simply switches
+    to next_state_after_dialogue as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -585,6 +625,8 @@ def handle_dialogue_input(event):
                 show_ingredient_checklist()
             elif dialogue_lines is SWAMP_ENTRY_TEXT and current_line_index == 3 and not swamp_checklist_visible:
                 show_swamp_checklist()
+            elif dialogue_lines is BRIDGE_INTRO_TEXT and current_line_index == 3 and not swamp_bridge_checklist_visible:
+                show_swamp_bridge_checklist()
 
             if current_line_index >= len(dialogue_lines):
                 if dialogue_on_complete == "START_DESERT_INTRO":
@@ -606,6 +648,9 @@ def handle_dialogue_input(event):
                     dialogue_on_complete = None
                     start_swamp_room()
                     start_swamp_entry_dialogue()
+                elif dialogue_on_complete == "START_BRIDGE_INTRO":
+                    dialogue_on_complete = None
+                    start_bridge_intro_dialogue()
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -643,6 +688,39 @@ def show_swamp_checklist():
     swamp_checklist_visible = True
 
 
+def start_bridge_intro_dialogue():
+    """
+    Plays the bridge-intro dialogue (Commit 12): Sprite spots the broken
+    bridge and explains that crossing it needs a tinkering potion made
+    from two scavenged parts. The checklist for those parts pops in
+    mid-dialogue, handled in handle_dialogue_input, the same way the
+    swamp's own ingredient checklist did.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = BRIDGE_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def show_swamp_bridge_checklist():
+    """
+    Makes the bridge-repair checklist visible. Called the instant the
+    bridge-intro dialogue reaches the line about it appearing (see
+    handle_dialogue_input). Reuses the same on-screen slot as the
+    swamp's own ingredient checklist, since that one is already hidden
+    by the time this appears.
+    """
+    global swamp_bridge_checklist_visible
+    swamp_bridge_checklist_visible = True
+
+
 def start_desert_intro_dialogue():
     """
     Kicks off the desert's own opening dialogue (DESERT_INTRO_TEXT).
@@ -662,7 +740,9 @@ def handle_room_movement():
     """
     Update the protagonist's position based on which movement keys are
     currently held down (arrow keys or WASD), bounded by the current
-    room's world width rather than a hardcoded desert-only value.
+    room's world width, and further clamped at the swamp's bridge until
+    it's been repaired (Commit 12) so the player can't just walk across
+    the broken gap.
     """
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -679,6 +759,9 @@ def handle_room_movement():
     protagonist["x"] = max(half_size, min(room_width - half_size, protagonist["x"]))
     protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
 
+    if current_room == "swamp" and not swamp_bridge_fixed:
+        protagonist["x"] = min(protagonist["x"], SWAMP_BRIDGE_X - half_size)
+
 
 def draw_room():
     """
@@ -687,7 +770,8 @@ def draw_room():
     sprite companion, interaction hint, control hint) plus that room's
     own one-off story elements. That's the desert's decoy flower, ice
     flower, and ingredient checklist puzzle, or the swamp's own
-    3-ingredient puzzle and harmful decoys (Commit 11).
+    3-ingredient puzzle, harmful decoys (Commit 11), and bridge/tinker
+    items (Commit 12).
     """
     screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
@@ -704,6 +788,9 @@ def draw_room():
     elif current_room == "swamp":
         if swamp_checklist_visible:
             draw_swamp_flowers()
+        if swamp_bridge_checklist_visible:
+            draw_tinker_items()
+        draw_bridge()
 
     draw_interaction_hint()
 
@@ -1088,7 +1175,10 @@ def update_nearby_interactable():
     ingredient flowers and decoy weed only become interactable once its
     checklist is visible; the swamp's three ingredient flowers, its two
     harmful decoys, and its harmless decoy weed only become interactable
-    once its own checklist is visible (Commit 11).
+    once its own checklist is visible (Commit 11). The two tinkering
+    parts only become interactable once the bridge checklist is visible,
+    and the bridge itself only becomes interactable once the tinkering
+    potion is brewed and it isn't already fixed (Commit 12).
     """
     global nearby_interactable
 
@@ -1152,6 +1242,15 @@ def update_nearby_interactable():
             protagonist["x"] - SWAMP_DECOY_WEED_POS[0],
             protagonist["y"] - SWAMP_DECOY_WEED_POS[1],
         )
+        tinker_item_1_distance = math.hypot(
+            protagonist["x"] - TINKER_ITEM_1_POS[0],
+            protagonist["y"] - TINKER_ITEM_1_POS[1],
+        )
+        tinker_item_2_distance = math.hypot(
+            protagonist["x"] - TINKER_ITEM_2_POS[0],
+            protagonist["y"] - TINKER_ITEM_2_POS[1],
+        )
+        bridge_distance = abs(protagonist["x"] - SWAMP_BRIDGE_X)
 
         if swamp_checklist_visible and not swamp_ingredient_flower_1_collected and swamp_ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
             nearby_interactable = "swamp_ingredient_flower_1"
@@ -1165,6 +1264,12 @@ def update_nearby_interactable():
             nearby_interactable = "swamp_harmful_weed"
         elif swamp_checklist_visible and not swamp_decoy_weed_eaten and swamp_decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
             nearby_interactable = "swamp_decoy_weed"
+        elif swamp_bridge_checklist_visible and not tinker_item_1_collected and tinker_item_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "tinker_item_1"
+        elif swamp_bridge_checklist_visible and not tinker_item_2_collected and tinker_item_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "tinker_item_2"
+        elif swamp_tinker_potion_brewed and not swamp_bridge_fixed and bridge_distance <= BRIDGE_TRIGGER_RADIUS:
+            nearby_interactable = "bridge"
         else:
             nearby_interactable = None
 
@@ -1194,6 +1299,10 @@ def handle_interaction_key():
         consume_swamp_harmful_weed()
     elif nearby_interactable == "swamp_decoy_weed":
         consume_swamp_decoy_weed()
+    elif nearby_interactable in ("tinker_item_1", "tinker_item_2"):
+        consume_tinker_item(nearby_interactable)
+    elif nearby_interactable == "bridge":
+        repair_bridge()
 
 def consume_ice_flower():
     """
@@ -1760,6 +1869,70 @@ def draw_swamp_checklist():
         screen.blit(text_surface, text_rect)
 
 
+def draw_bridge():
+    """
+    Draws the swamp's bridge as a vertical strip at SWAMP_BRIDGE_X,
+    coloured broken (dark, splintered-looking) until swamp_bridge_fixed
+    becomes True, at which point it switches to a solid fixed colour.
+    """
+    screen_x, _ = world_to_screen(SWAMP_BRIDGE_X, 0)
+    bridge_rect = pygame.Rect(int(screen_x - BRIDGE_WIDTH // 2), 0, BRIDGE_WIDTH, SCREEN_HEIGHT)
+    color = BRIDGE_FIXED_COLOR if swamp_bridge_fixed else BRIDGE_BROKEN_COLOR
+    pygame.draw.rect(screen, color, bridge_rect)
+
+
+def draw_tinker_items():
+    """
+    Draws the swamp's two scavengeable tinkering parts (the rusty cog and
+    the vine-bound plank), each only for as long as it's still
+    uncollected.
+    """
+    if not tinker_item_1_collected:
+        screen_x, screen_y = world_to_screen(*TINKER_ITEM_1_POS)
+        pygame.draw.circle(screen, TINKER_ITEM_COLOR, (int(screen_x), int(screen_y)), 12)
+
+    if not tinker_item_2_collected:
+        screen_x, screen_y = world_to_screen(*TINKER_ITEM_2_POS)
+        pygame.draw.circle(screen, TINKER_ITEM_COLOR, (int(screen_x), int(screen_y)), 12)
+
+
+def draw_swamp_bridge_checklist():
+    """
+    Draws the bridge-repair checklist (the two tinkering parts), reusing
+    the same on-screen slot and post-it styling as the other checklists.
+    """
+    checklist_x, checklist_y = SWAMP_CHECKLIST_POS
+    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect)
+    pygame.draw.rect(screen, BLACK, box_rect, 2)
+
+    checklist_items = [
+        (TINKER_ITEM_1_NAME, tinker_item_1_collected),
+        (TINKER_ITEM_2_NAME, tinker_item_2_collected),
+    ]
+    for i, (name, collected) in enumerate(checklist_items):
+        line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
+        checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
+        pygame.draw.rect(screen, BLACK, checkbox_rect, 2)
+        if collected:
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.left + 2, checkbox_rect.centery),
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                2,
+            )
+            pygame.draw.line(
+                screen, BLACK,
+                (checkbox_rect.centerx - 1, checkbox_rect.bottom - 3),
+                (checkbox_rect.right - 1, checkbox_rect.top + 2),
+                2,
+            )
+
+        text_surface = hint_font.render(name, True, BLACK)
+        text_rect = text_surface.get_rect(topleft=(checkbox_rect.right + 8, line_y))
+        screen.blit(text_surface, text_rect)
+
+
 def start_room_timer():
     """
     Starts (or restarts) the 90-second room timer, used for the desert's
@@ -1899,8 +2072,9 @@ def consume_swamp_ingredient_flower(which):
     Waters and collects one of the swamp's three real ingredient flowers:
     ticks it off the swamp checklist and plays Sprite's short reaction
     line. If this was the last of the three needed, chains into the
-    swamp potion-brewed dialogue instead of the normal reaction line, and
-    hides the checklist since the potion is done.
+    swamp potion-brewed dialogue, hides the checklist since the potion
+    is done, and - once that finishes - chains straight into the bridge
+    intro dialogue (Commit 12).
 
     Args:
         which (str): "swamp_ingredient_flower_1", "_2", or "_3".
@@ -1935,7 +2109,7 @@ def consume_swamp_ingredient_flower(which):
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
     dialogue_backdrop_state = "ROOM"
-    dialogue_on_complete = None
+    dialogue_on_complete = "START_BRIDGE_INTRO" if all_collected else None
     game_state = "DIALOGUE"
 
 
@@ -1983,9 +2157,8 @@ def consume_swamp_harmful_weed():
 
 def consume_swamp_decoy_weed():
     """
-    Reaction to interacting with the swamp's harmless decoy weed: does
-    not affect the checklist or HP, just a short flavour line. Only
-    happens once.
+    Reaction to interacting with the swamp's harmless decoy weed: no HP
+    or checklist effect, just a short flavour line. Only happens once.
     """
     global swamp_decoy_weed_eaten
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
@@ -1994,6 +2167,71 @@ def consume_swamp_decoy_weed():
     swamp_decoy_weed_eaten = True
 
     dialogue_lines = [SWAMP_DECOY_WEED_REACTION]
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def consume_tinker_item(which):
+    """
+    Collects one of the two scavenged bridge-repair parts: ticks it off
+    the bridge checklist and plays a short reaction line. If this was
+    the second (final) part, brews the tinkering potion, hides the
+    checklist, and chains into that dialogue instead of the normal
+    reaction line.
+
+    Args:
+        which (str): "tinker_item_1" or "tinker_item_2".
+    """
+    global tinker_item_1_collected, tinker_item_2_collected
+    global swamp_tinker_potion_brewed, swamp_bridge_checklist_visible
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if which == "tinker_item_1":
+        tinker_item_1_collected = True
+    elif which == "tinker_item_2":
+        tinker_item_2_collected = True
+
+    both_collected = tinker_item_1_collected and tinker_item_2_collected
+
+    if both_collected:
+        swamp_tinker_potion_brewed = True
+        swamp_bridge_checklist_visible = False
+        dialogue_lines = TINKER_POTION_BREWED_TEXT
+    else:
+        dialogue_lines = [TINKER_ITEM_COLLECTED_REACTION]
+
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
+
+def repair_bridge():
+    """
+    Interacting with the bridge once the tinkering potion is brewed
+    fixes it for good, clearing the invisible wall enforced in
+    handle_room_movement and playing a short reaction dialogue. Only
+    happens once.
+    """
+    global swamp_bridge_fixed
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    if swamp_bridge_fixed:
+        return
+
+    swamp_bridge_fixed = True
+
+    dialogue_lines = BRIDGE_FIXED_TEXT
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
@@ -2062,10 +2300,11 @@ def draw_game_over_screen():
 def reset_run_state():
     """
     Resets every run-specific counter and flag back to a fresh game's
-    starting values, including the swamp's ingredient/decoy flags added
-    in Commit 11. Shared by the game-over screen and the win screen,
-    since both send the player back to the title screen for a new attempt.
-    Session statistics (games_played, total_deaths, total_wins,
+    starting values, including the swamp's ingredient/decoy flags from
+    Commit 11 and the bridge/tinkering flags added in Commit 12. Shared
+    by the game-over screen and the win screen, since both send the
+    player back to the title screen for a new attempt. Session
+    statistics (games_played, total_deaths, total_wins,
     fastest_win_time_ms) are deliberately left untouched here.
     """
     global hearts, hp, sprite_friendship_level, rat_friendship_level
@@ -2076,6 +2315,8 @@ def reset_run_state():
     global swamp_checklist_visible, swamp_potion_brewed
     global swamp_ingredient_flower_1_collected, swamp_ingredient_flower_2_collected, swamp_ingredient_flower_3_collected
     global swamp_harmful_flower_eaten, swamp_harmful_weed_eaten, swamp_decoy_weed_eaten
+    global swamp_bridge_checklist_visible, swamp_tinker_potion_brewed, swamp_bridge_fixed
+    global tinker_item_1_collected, tinker_item_2_collected
     global hp_heal_popup_text, hp_damage_popup_text
 
     hearts = MAX_HEARTS
@@ -2105,6 +2346,11 @@ def reset_run_state():
     swamp_harmful_flower_eaten = False
     swamp_harmful_weed_eaten = False
     swamp_decoy_weed_eaten = False
+    swamp_bridge_checklist_visible = False
+    swamp_tinker_potion_brewed = False
+    swamp_bridge_fixed = False
+    tinker_item_1_collected = False
+    tinker_item_2_collected = False
     hp_heal_popup_text = None
     hp_damage_popup_text = None
     protagonist["x"] = 1200
@@ -2256,6 +2502,9 @@ while running:
 
     if swamp_checklist_visible and game_state != "WIN":
         draw_swamp_checklist()
+
+    if swamp_bridge_checklist_visible and game_state != "WIN":
+        draw_swamp_bridge_checklist()
 
     pygame.display.flip()
     clock.tick(60)
