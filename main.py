@@ -214,7 +214,7 @@ decoy_flower_eaten = False
 rat_friendship_level = 0
 
 # --- Sprite's true introduction (View 7) --------------------------------
-sprite_true_intro_played = False   # Whether View 7 (Sprite's real intro + alliance) has played yet
+sprite_true_intro_played = False
 
 SPRITE_TRUE_INTRO_TEXT = [
     "\"See? All better now!\" She does a little spin in the air, clearly pleased with herself.",
@@ -265,6 +265,17 @@ choice_friendship_target = None
 choice_on_complete = None
 choice_selected_option = 0
 choice_option_rects = []
+
+# --- Potion checklist widget ---------------------------------------------
+checklist_visible = False
+CHECKLIST_POS = (SCREEN_WIDTH - 210, 20)
+CHECKLIST_WIDTH = 190
+CHECKLIST_LINE_HEIGHT = 26
+
+# --- Room timer (90-second countdown, starts once View 8 finishes) -------
+ROOM_TIMER_DURATION_MS = 90000
+room_timer_active = False
+room_timer_start_time = 0
 
 def draw_title_screen():
     """
@@ -1244,6 +1255,81 @@ def handle_dialogue_choice_input(event):
                 resolve_dialogue_choice(i)
 
 
+def show_ingredient_checklist():
+    """
+    Makes the potion checklist visible and starts the 90-second room
+    timer. Called once, right after View 8's dialogue finishes.
+    """
+    global checklist_visible
+
+    checklist_visible = True
+    start_room_timer()
+
+
+def draw_checklist():
+    """
+    Draws the top-right "post-it note" checklist of ingredient flowers
+    still needed, with a strikethrough over any that are already
+    collected.
+    """
+    checklist_x, checklist_y = CHECKLIST_POS
+    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect)
+    pygame.draw.rect(screen, BLACK, box_rect, 2)
+
+    checklist_items = [
+        (INGREDIENT_FLOWER_1_NAME, ingredient_flower_1_collected),
+        (INGREDIENT_FLOWER_2_NAME, ingredient_flower_2_collected),
+    ]
+    for i, (name, collected) in enumerate(checklist_items):
+        line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
+        text_surface = hint_font.render(name, True, BLACK)
+        text_rect = text_surface.get_rect(topleft=(box_rect.x + 10, line_y))
+        screen.blit(text_surface, text_rect)
+        if collected:
+            strike_y = text_rect.centery
+            pygame.draw.line(screen, BLACK, (text_rect.left, strike_y), (text_rect.right, strike_y), 2)
+
+
+def start_room_timer():
+    """
+    Starts (or restarts) the 90-second room timer, used for the desert's
+    ingredient-gathering countdown.
+    """
+    global room_timer_active, room_timer_start_time
+
+    room_timer_active = True
+    room_timer_start_time = pygame.time.get_ticks()
+
+
+def update_room_timer():
+    """
+    Counts the room timer down, triggering handle_room_timer_expired()
+    the moment it runs out. Does nothing once the timer isn't active.
+    """
+    if not room_timer_active:
+        return
+
+    elapsed = pygame.time.get_ticks() - room_timer_start_time
+    if elapsed >= ROOM_TIMER_DURATION_MS:
+        handle_room_timer_expired()
+
+
+def draw_room_timer():
+    """
+    Draws the remaining seconds on the room timer just above the
+    ingredient checklist, turning red once time is running low (10
+    seconds or less) as an urgency cue.
+    """
+    elapsed = pygame.time.get_ticks() - room_timer_start_time
+    seconds_left = max(0, (ROOM_TIMER_DURATION_MS - elapsed) // 1000 + 1)
+
+    color = HP_BAR_COLOR_LOW if seconds_left <= 10 else WHITE
+    timer_surface = hint_font.render(f"Time left: {int(seconds_left)}s", True, color)
+    timer_rect = timer_surface.get_rect(topright=(SCREEN_WIDTH - 20, CHECKLIST_POS[1] - 22))
+    screen.blit(timer_surface, timer_rect)
+
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -1275,6 +1361,7 @@ while running:
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP"):
         update_heat_drain()
         update_sprite_animation()
+        update_room_timer()
 
     if game_state == "DESERT_ROOM" and previous_game_state != "DESERT_ROOM":
         desert_hint_start_time = pygame.time.get_ticks()
@@ -1308,6 +1395,10 @@ while running:
     if hp_bar_visible:
         draw_hp_bar()
         draw_hp_heal_popup()
+
+    if checklist_visible:
+        draw_checklist()
+        draw_room_timer()
 
     pygame.display.flip()
     clock.tick(60)
