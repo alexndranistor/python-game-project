@@ -40,7 +40,7 @@ dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
 # --- Core state machine
-# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "DESERT_ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"
+# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "DESERT_ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER"
 game_state = "TITLE"
 
 # --- Title screen menu state
@@ -308,6 +308,13 @@ decoy_weed_interacted = False
 
 INGREDIENT_WATERED_REACTION = "Sprite's light dips toward the flower, and it blooms back to life in an instant. One down!"
 DECOY_WEED_REACTION = "\"That one's just a common weed - no use to us. Keep looking.\""
+
+# --- Hearts / lives system (confirmed core system) ------------------------
+MAX_HEARTS = 3
+hearts = MAX_HEARTS
+checkpoint_state = "DESERT_ROOM"  # Only one checkpoint exists so far
+
+GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
 
 def draw_title_screen():
     """
@@ -1103,6 +1110,22 @@ def draw_hp_bar():
     hp_text_rect = hp_text_surface.get_rect(topleft=(bar_x, bar_y + HP_BAR_HEIGHT + 4))
     screen.blit(hp_text_surface, hp_text_rect)
 
+def draw_hearts():
+    """
+    Draws the player's remaining hearts (simple filled/outline circles)
+    just under the HP bar, since both are always-visible survival stats.
+    """
+    heart_radius = 8
+    start_x = HP_BAR_POS[0] + heart_radius
+    start_y = HP_BAR_POS[1] + HP_BAR_HEIGHT + 26
+
+    for i in range(MAX_HEARTS):
+        center = (start_x + i * (heart_radius * 2 + 6), start_y)
+        if i < hearts:
+            pygame.draw.circle(screen, (231, 76, 60), center, heart_radius)
+        else:
+            pygame.draw.circle(screen, (231, 76, 60), center, heart_radius, 2)
+
 def show_hp_heal_popup(amount_healed):
     """
     Starts a short-lived floating "+<amount> HP" text callout.
@@ -1439,6 +1462,28 @@ def draw_room_timer():
     screen.blit(timer_surface, timer_rect)
 
 
+def handle_room_timer_expired():
+    """
+    Runs when the 90-second timer hits zero before the potion's brewed:
+    costs 1 heart and, per the confirmed hearts system, respawns the
+    player at their last checkpoint. Since only the desert checkpoint
+    exists so far, "respawning" currently just means restarting the
+    timer rather than losing any already-collected ingredients - once
+    more checkpoints exist, this is where that logic will expand.
+    Losing the final heart triggers the game-over screen instead.
+    """
+    global hearts, room_timer_active, game_state
+
+    room_timer_active = False
+    hearts -= 1
+
+    if hearts <= 0:
+        game_state = "GAME_OVER"
+    else:
+        game_state = checkpoint_state
+        start_room_timer()
+
+
 def draw_ingredient_flowers():
     """
     Draws both ingredient flowers (withered until collected) and the
@@ -1506,6 +1551,62 @@ def consume_decoy_weed():
     game_state = "DIALOGUE"
 
 
+def draw_game_over_screen():
+    """
+    Draws the full game-over screen shown once all 3 hearts are lost,
+    with the option to try again from the title screen.
+    """
+    screen.fill((20, 20, 20))
+
+    title_surface = title_font.render("Game Over", True, WHITE)
+    title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 220))
+    screen.blit(title_surface, title_rect)
+
+    wrapped_lines = wrap_text(GAME_OVER_TEXT, dialogue_font, SCREEN_WIDTH - 100)
+    line_height = dialogue_font.get_linesize()
+    for i, line in enumerate(wrapped_lines):
+        line_surface = dialogue_font.render(line, True, WHITE)
+        line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + i * line_height))
+        screen.blit(line_surface, line_rect)
+
+    hint_surface = hint_font.render("Press ENTER to try again", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+    screen.blit(hint_surface, hint_rect)
+
+
+def handle_game_over_input(event):
+    """
+    Handles input on the game-over screen: pressing ENTER resets every
+    run-specific counter and returns to the title screen for a fresh
+    attempt.
+    """
+    global game_state, hearts, hp, sprite_friendship_level, rat_friendship_level
+    global decoy_flower_eaten, ice_flower_collected, ice_flower_encountered
+    global ingredient_flower_1_collected, ingredient_flower_2_collected, decoy_weed_interacted
+    global checklist_visible, room_timer_active, heat_drain_active, heat_immune, hp_bar_visible
+    global sprite_true_intro_played, sprite_state
+
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+        hearts = MAX_HEARTS
+        hp = MAX_HP
+        sprite_friendship_level = 0
+        rat_friendship_level = 0
+        decoy_flower_eaten = False
+        ice_flower_collected = False
+        ice_flower_encountered = False
+        ingredient_flower_1_collected = False
+        ingredient_flower_2_collected = False
+        decoy_weed_interacted = False
+        checklist_visible = False
+        room_timer_active = False
+        heat_drain_active = False
+        heat_immune = False
+        hp_bar_visible = False
+        sprite_true_intro_played = False
+        sprite_state = "HIDDEN"
+        game_state = "TITLE"
+
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -1525,6 +1626,8 @@ while running:
             handle_pause_input(event)
         elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
             handle_placeholder_input(event)
+        elif game_state == "GAME_OVER":
+            handle_game_over_input(event)
 
     if game_state == "DESERT_ROOM":
         handle_desert_movement()
@@ -1534,7 +1637,7 @@ while running:
 
     update_camera()
 
-    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP"):
+    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP", "GAME_OVER"):
         update_heat_drain()
         update_sprite_animation()
         update_room_timer()
@@ -1567,10 +1670,13 @@ while running:
         draw_pause_menu()
     elif game_state in ("SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"):
         draw_placeholder_screen()
+    elif game_state == "GAME_OVER":
+        draw_game_over_screen()
 
     if hp_bar_visible:
         draw_hp_bar()
         draw_hp_heal_popup()
+        draw_hearts()
 
     if checklist_visible:
         draw_checklist()
