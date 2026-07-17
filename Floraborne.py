@@ -35,6 +35,7 @@ TITLE_BG_TOP = (255, 226, 214)
 TITLE_BG_BOTTOM = (240, 188, 205)
 TITLE_TEXT_COLOR = (196, 74, 132)
 SOFT_HINT_COLOR = (205, 175, 185)
+STATS_TEXT_COLOR = (120, 30, 60)
 
 # --- Fonts (pygame doesn't ship a dedicated pixel font, so this tries a
 # few common blocky/monospace system fonts for a more retro feel, and
@@ -63,8 +64,8 @@ menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
 # --- Player data
-PROTAGONIST_SIZE = 76
-PROTAGONIST_HEIGHT = 108
+PROTAGONIST_SIZE = 130
+PROTAGONIST_HEIGHT = 190
 PLAYER_SPEED = 4
 protagonist = {
     "name": "Protagonist",
@@ -119,7 +120,7 @@ DESERT_INTRO_TEXT = [
     "A long stretch of withered flowers sits in the distance, sad and pensive.",
     "This place is dangerous - keep an eye on your health.",
     "The heat is already starting to get to you.",
-    "Look around... there might be something nearby that can help.",
+    "Look around... maybe that glowing flower over there could help?",
 ]
 
 # --- Decoy flower (desert opening) ----------------------------------
@@ -146,7 +147,7 @@ ICE_FLOWER_HINT_TEXT = [
     "\"Look - that one over there! Press E to pick it up!\"",
 ]
 SPRITE_FLOWER_WARNING_TEXT = [
-    "A tiny light darts out of nowhere and hovers right in front of you.",
+    "A small butterfly darts out of nowhere, wings glowing faintly, and hovers right in front of you.",
     "\"Wait, wait, WAIT - don't pick that!\"",
     "\"It's just a common flower, it doesn't do anything. And with the world already this dried up, we need to let whatever can still grow, grow.\"",
     "\"Oh - sorry, I should introduce myself. I'm Sprite. I'll be keeping you out of trouble from now on, apparently.\"",
@@ -154,7 +155,7 @@ SPRITE_FLOWER_WARNING_TEXT = [
     "\"Quick - go left! There should be a flower that way that can help you.\"",
 ]
 DECOY_FLOWER_EATEN_TEXT = [
-    "The tiny light flickers, and her expression falls.",
+    "Her wings flicker and dim, and her expression falls.",
     "\"...I told you not to eat that.\"",
     "\"I really thought you'd listen to me on this one.\"",
 ]
@@ -234,7 +235,7 @@ SPRITE_TRUE_INTRO_TEXT = [
     "\"That's lesson one: nature can heal just as easily as it can hurt you - if you actually bother to ask it properly.\"",
     "\"Right. Since you're not actively dying anymore, I suppose I owe you a proper introduction.\" She clears her throat, mock-formal. \"I am - or rather, I was - a fully trained, very seasoned herbalist. Tinctures, remedies, the occasional bit of showing off. I was good.\"",
     "\"I was brewing something at home, actually, the exact moment that whole 'gigantic surge of magic' business happened. Whatever I was holding in my hands at the time didn't exactly play nice with all that raw power in the air.\"",
-    "\"Next thing I know - poof. This.\" She gestures at her tiny glowing self, thoroughly unimpressed. \"A sprite of light. No hands, no proper body, and somehow still expected to fix everything.\"",
+    "\"Next thing I know - poof. This.\" She gestures at her small glowing wings, thoroughly unimpressed. \"A butterfly. No hands, no proper body to speak of, and somehow still expected to fix everything.\"",
     "\"Which is a problem, considering I can't so much as hold a mixing spoon anymore, let alone brew a potion myself. And Floraborne isn't exactly going to save itself.\"",
     "\"So. Lucky you. I need actual hands, and you've apparently got magic to spare. Whether that's enough to be useful remains... to be seen.\"",
     "\"So? Are you in properly, or is this going to be a waste of both our time?\"",
@@ -274,7 +275,7 @@ POTION_RECIPE_INTRO_TEXT = [
     "\"Lucky for you, I happen to know the recipe for an anti-poison potion that'll get us through it safely.\"",
     "A small checklist flickers into the top-right corner of your vision - two flowers, both unticked.",
     "\"There. Now you've got a list, and I've got approximately zero patience left for standing around. Go find the first one!\"",
-    "\"Oh - and if you spot any flowers out there looking half-dead, just walk up and interact with them. I've still got just enough magic left in me to water them myself. You don't have to do a thing, for once.\"",
+    "\"Oh - and if you spot any flowers out there looking half-dead, just walk up and interact with them. Watering them back to life is pure magic, and it's mine - one thing this surge left untouched, and nobody's ever taking that away from me.\"",
     "\"Go on, then. Sniff it out like the little magic bloodhound you apparently are.\"",
 ]
 
@@ -337,6 +338,7 @@ total_wins = 0
 fastest_win_time_ms = None
 last_run_time_ms = 0
 run_start_time = 0
+friendship_points_gained = 0
 
 # --- Swamp ingredient puzzle (Commit 11) ---------------------------------
 SWAMP_CHECKLIST_POS = CHECKLIST_POS  # Reuses the same on-screen slot as the desert checklist, since only one is ever visible at a time
@@ -539,6 +541,7 @@ DOOR_COLOR = (40, 35, 30)
 door_encountered = False
 SPRITE_FRIENDSHIP_HELP_THRESHOLD = 4  # sprite_friendship_level at or above this -> she helps in the final battle
 game_over_text_override = None
+win_ending_type = None
 FINAL_BATTLE_INTRO_TEXT = [
     "Ahead, past where the mud finally turns to solid stone, a heavy door stands sealed into the ruins of an old wall.",
     "Sprite's light flickers uneasily. \"...That's it, isn't it. Whatever's actually been keeping Floraborne broken.\"",
@@ -692,6 +695,14 @@ def draw_desert_background():
         )
 
     sun_center = (SCREEN_WIDTH - 90, 80)
+    sun_ray_color = (255, 244, 200)
+    for ray_angle_degrees in range(0, 360, 30):
+        ray_angle = math.radians(ray_angle_degrees)
+        inner_x = sun_center[0] + math.cos(ray_angle) * 52
+        inner_y = sun_center[1] + math.sin(ray_angle) * 52
+        outer_x = sun_center[0] + math.cos(ray_angle) * 72
+        outer_y = sun_center[1] + math.sin(ray_angle) * 72
+        pygame.draw.line(screen, sun_ray_color, (inner_x, inner_y), (outer_x, outer_y), 4)
     pygame.draw.circle(screen, (255, 236, 179), sun_center, 45)
     pygame.draw.circle(screen, (255, 250, 214), sun_center, 45, 3)
 
@@ -742,7 +753,7 @@ def draw_title_screen():
 
     if games_played > 0:
         stats_surface = hint_font.render(
-            f"Games played: {games_played}   Wins: {total_wins}", True, SOFT_HINT_COLOR
+            f"Games played: {games_played}   Wins: {total_wins}", True, STATS_TEXT_COLOR
         )
         stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
         screen.blit(stats_surface, stats_rect)
@@ -759,10 +770,11 @@ def activate_menu_option(option_name):
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
     global dialogue_backdrop_state, dialogue_on_complete
-    global games_played, run_start_time
+    global games_played, run_start_time, friendship_points_gained
 
     if option_name == "New Game":
         games_played += 1
+        friendship_points_gained = 0
         run_start_time = pygame.time.get_ticks()
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
@@ -1127,12 +1139,18 @@ def draw_room():
     draw_sprite_character()
     if rat_state == "FOLLOWING":
         draw_rat_companion()
+    draw_friendship_points_counter()
     draw_control_hint()
 
 def draw_control_hint():
     """
-    Draw a temporary "Use ARROW KEYS or WASD to move" prompt.
+    Draw a temporary "Use ARROW KEYS or WASD to move" prompt. Only shown
+    while actually free to move around the room, so it can never overlap a
+    dialogue box or any other overlay.
     """
+    if game_state != "ROOM":
+        return
+
     elapsed = pygame.time.get_ticks() - desert_hint_start_time
     total_duration = HINT_VISIBLE_DURATION + HINT_FADE_DURATION
 
@@ -1149,6 +1167,21 @@ def draw_control_hint():
     hint_surface.set_alpha(alpha)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
+
+
+def draw_friendship_points_counter():
+    """
+    Draws this run's running total of friendship points gained (from every
+    Sprite/Rat dialogue choice so far this game) in the top-centre of the
+    screen, clear of the HP bar/hearts on the left and the checklist on the
+    right.
+    """
+    counter_surface = hint_font.render(
+        f"Friendship gained: {friendship_points_gained}", True, WHITE
+    )
+    counter_rect = counter_surface.get_rect(center=(SCREEN_WIDTH // 2, 30))
+    screen.blit(counter_surface, counter_rect)
+
 
 def handle_room_input(event):
     """
@@ -1692,9 +1725,12 @@ def consume_decoy_flower():
 
 def draw_interaction_hint():
     """
-    Draws a 'Press E' prompt above the protagonist when something interactable is in range.
+    Draws a 'Press E' prompt above the protagonist when something interactable
+    is in range. Only shown while actually free to move around the room, so
+    it can never end up peeking out from behind a dialogue box, choice menu,
+    item popup, or the pause menu.
     """
-    if nearby_interactable is None:
+    if game_state != "ROOM" or nearby_interactable is None:
         return
 
     screen_x, screen_y = world_to_screen(protagonist["x"], protagonist["y"])
@@ -2011,7 +2047,7 @@ def resolve_dialogue_choice(index):
     its reaction line as a normal one-line dialogue, chaining onward via
     choice_on_complete once that line finishes.
     """
-    global sprite_friendship_level, rat_friendship_level
+    global sprite_friendship_level, rat_friendship_level, friendship_points_gained
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
     global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
 
@@ -2020,6 +2056,7 @@ def resolve_dialogue_choice(index):
         sprite_friendship_level = max(0, sprite_friendship_level + delta)
     elif choice_friendship_target == "rat":
         rat_friendship_level = max(0, rat_friendship_level + delta)
+    friendship_points_gained += delta
 
     dialogue_lines = [choice_reactions[index]]
     current_line_index = 0
@@ -2884,18 +2921,22 @@ def resolve_final_battle():
     """
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
     global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+    global win_ending_type
 
     sprite_helps = sprite_friendship_level >= SPRITE_FRIENDSHIP_HELP_THRESHOLD
     rat_helps = rat_outcome == "helped"
 
     if sprite_helps and rat_helps:
         dialogue_lines = ENDING_BOTH_HELP_TEXT
+        win_ending_type = "both"
         dialogue_on_complete = "ACTIVATE_WIN_ENDING"
     elif sprite_helps:
         dialogue_lines = ENDING_SPRITE_ONLY_TEXT
+        win_ending_type = "sprite_only"
         dialogue_on_complete = "ACTIVATE_WIN_ENDING"
     elif rat_helps:
         dialogue_lines = ENDING_RAT_ONLY_TEXT
+        win_ending_type = "rat_only"
         dialogue_on_complete = "ACTIVATE_WIN_ENDING"
     else:
         dialogue_lines = ENDING_NEITHER_HELP_TEXT
@@ -3065,11 +3106,21 @@ def draw_win_screen():
     """
     screen.fill((20, 45, 30))
 
-    title_surface = title_font.render("You Made It!", True, WHITE)
+    win_titles = {
+        "both": "A New Beginning",
+        "sprite_only": "Balance Restored",
+        "rat_only": "A Different Path",
+    }
+    title_surface = title_font.render(win_titles.get(win_ending_type, "You Made It!"), True, WHITE)
     title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 220))
     screen.blit(title_surface, title_rect)
 
-    wrapped_lines = wrap_text(WIN_TEXT, dialogue_font, SCREEN_WIDTH - 100)
+    win_messages = {
+        "both": "Floraborne's balance is restored, and Sprite and the Rat are building a new life together right where it all began.",
+        "sprite_only": "Floraborne's balance is restored, and your journey with Sprite continues - though the Rat's story ended without you.",
+        "rat_only": "Floraborne's balance is restored - but the same magic that changed the Rat has changed you too. Together, rats in a healing world.",
+    }
+    wrapped_lines = wrap_text(win_messages.get(win_ending_type, WIN_TEXT), dialogue_font, SCREEN_WIDTH - 100)
     line_height = dialogue_font.get_linesize()
     for i, line in enumerate(wrapped_lines):
         line_surface = dialogue_font.render(line, True, WHITE)
@@ -3083,6 +3134,12 @@ def draw_win_screen():
     )
     stats_surface = hint_font.render(stats_text, True, (200, 200, 200))
     stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + len(wrapped_lines) * line_height + 20))
+    screen.blit(stats_surface, stats_rect)
+
+    stats_surface = hint_font.render(
+        f"Friendship points gained this run: {friendship_points_gained}", True, SOFT_HINT_COLOR
+    )
+    stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 70))
     screen.blit(stats_surface, stats_rect)
 
     hint_surface = hint_font.render("Press ENTER to play again", True, SOFT_HINT_COLOR)
