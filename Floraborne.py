@@ -111,6 +111,7 @@ last_reveal_time = 0
 next_state_after_dialogue = "ROOM"
 dialogue_backdrop_state = None
 DIALOGUE_BOX_HEIGHT = 150  # Fixed height so the box never grows to fit long text; overflow scrolls instead.
+dialogue_black_backdrop = False  # True only during the desert-to-swamp loading screen (see start_loading_screen_dialogue)
 
 # --- Desert biome opening dialogue -------------------------------------------------
 DESERT_INTRO_TEXT = [
@@ -291,8 +292,9 @@ choice_option_rects = []
 
 # --- Potion checklist widget ---------------------------------------------
 checklist_visible = False
+CHECKLIST_RIGHT_MARGIN = 20
 CHECKLIST_POS = (SCREEN_WIDTH - 210, 20)
-CHECKLIST_WIDTH = 190
+CHECKLIST_WIDTH = 190  # Fallback only now - each checklist's real width is computed from its longest item name so text always fits
 CHECKLIST_LINE_HEIGHT = 26
 CHECKLIST_CHECKBOX_SIZE = 14
 
@@ -321,6 +323,13 @@ SWAMP_TRANSITION_TEXT = [
     "\"That's both ingredients - let's get this brewed before that fog gets any worse.\"",
     "A moment later, the potion's mixed and swallowed. The air already feels a little safer to breathe.",
     "\"Right - that's the swamp taken care of, mostly. Let's move. The sooner we're through, the better.\"",
+]
+
+# --- Loading screen between the desert and the swamp ----------------------
+LOADING_TEXT = [
+    "Time passes as the two of you make your way onward, the desert's heat finally fading behind you.",
+    "The ground grows softer underfoot, the air heavier and damper with every step.",
+    "By the time the sand gives way completely, the swamp is already waiting ahead.",
 ]
 
 # --- Hearts / lives system (confirmed core system) ------------------------
@@ -660,6 +669,8 @@ IMAGES = {
     "blistercap_bloom": load_image_safe("assets/Flower 8 - RED.png", (32, 32)),
     "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (32, 32)),
     "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (32, 32)),
+    "gear": load_image_safe("assets/gear.png", (32, 32)),
+    "log_good": load_image_safe("assets/log_good.png", (32, 32)),
     "clock": load_image_safe("assets/Clock.png", (CLOCK_ICON_SIZE, CLOCK_ICON_SIZE)),
     "heart_container": load_image_safe("assets/heart_container.png", (HEART_ICON_SIZE, HEART_ICON_SIZE)),
 }
@@ -895,8 +906,13 @@ def draw_text_box(text):
     revealed lines are shown (older lines scroll out of view as more text
     is typed out), so long lines never spill past the box edges or
     collide with the "Press SPACE to continue" hint or anything else on
-    screen.
+    screen. While dialogue_black_backdrop is True (the desert-to-swamp
+    loading screen), this also paints the whole screen black first so
+    nothing behind the box is visible.
     """
+    if dialogue_black_backdrop:
+        screen.fill(BLACK)
+
     box_width = SCREEN_WIDTH - 100
     max_text_width = box_width - 40
     wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
@@ -987,6 +1003,9 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "START_POTION_RECIPE_INTRO":
                     dialogue_on_complete = None
                     start_potion_recipe_intro_dialogue()
+                elif dialogue_on_complete == "START_LOADING_SCREEN":
+                    dialogue_on_complete = None
+                    start_loading_screen_dialogue()
                 elif dialogue_on_complete == "START_SWAMP_ROOM":
                     dialogue_on_complete = None
                     start_swamp_room()
@@ -1044,11 +1063,14 @@ def start_swamp_entry_dialogue():
     crossing this area for real requires a stronger, three-ingredient
     potion, and warns that some of what's growing here is actively
     harmful. The checklist for this potion pops in mid-dialogue, handled
-    in handle_dialogue_input, the same way the desert's did.
+    in handle_dialogue_input, the same way the desert's did. Also turns
+    off the loading screen's black backdrop, now that it's done its job.
     """
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
     global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+    global dialogue_black_backdrop
 
+    dialogue_black_backdrop = False
     dialogue_lines = SWAMP_ENTRY_TEXT
     current_line_index = 0
     revealed_chars = 0
@@ -1116,6 +1138,29 @@ def start_desert_intro_dialogue():
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
     dialogue_backdrop_state = "ROOM"
+    game_state = "DIALOGUE"
+
+
+def start_loading_screen_dialogue():
+    """
+    Plays a short black loading-style screen between the desert and the
+    swamp: a few lines about time passing on the journey, shown over a
+    plain black background instead of the room (see dialogue_black_backdrop
+    and draw_text_box). Chains straight into the swamp room once the text
+    finishes.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete
+    global dialogue_black_backdrop, game_state
+
+    dialogue_lines = LOADING_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_black_backdrop = True
+    dialogue_on_complete = "START_SWAMP_ROOM"
     game_state = "DIALOGUE"
 
 def handle_room_movement():
@@ -2297,31 +2342,45 @@ def handle_dialogue_choice_input(event):
 
 def show_ingredient_checklist():
     """
-    Makes the potion checklist visible and starts the 90-second room
-    timer. Called the instant the potion-recipe dialogue reaches the
-    line about the checklist appearing (see handle_dialogue_input).
+    Makes the potion checklist visible. Called the instant the
+    potion-recipe dialogue reaches the line about the checklist
+    appearing (see handle_dialogue_input). The room timer has been
+    removed entirely, so this no longer starts any countdown.
     """
     global checklist_visible
 
     checklist_visible = True
-    start_room_timer()
+
+
+def compute_checklist_box_width(names):
+    """
+    Works out how wide a checklist box needs to be so every item's name
+    fits comfortably next to its checkbox, instead of relying on one
+    fixed width that was too narrow for longer names like
+    "Vine-Bound Plank". Every checklist below calls this instead of
+    using CHECKLIST_WIDTH directly.
+    """
+    longest_name_width = max(hint_font.size(name)[0] for name in names)
+    return CHECKLIST_CHECKBOX_SIZE + 8 + longest_name_width + 30
 
 
 def draw_checklist():
     """
     Draws the top-right "post-it note" checklist of ingredient flowers
     still needed, each with its own tick-box that fills in with a
-    checkmark once that flower has been collected.
+    checkmark once that flower has been collected. The box is sized to
+    fit its own text and stays anchored to the same top-right corner.
     """
-    checklist_x, checklist_y = CHECKLIST_POS
-    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
-    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
-
     checklist_items = [
         (INGREDIENT_FLOWER_1_NAME, ingredient_flower_1_collected),
         (INGREDIENT_FLOWER_2_NAME, ingredient_flower_2_collected),
     ]
+    box_width = compute_checklist_box_width([name for name, _ in checklist_items])
+    checklist_x = SCREEN_WIDTH - CHECKLIST_RIGHT_MARGIN - box_width
+    checklist_y = CHECKLIST_POS[1]
+    box_rect = pygame.Rect(checklist_x, checklist_y, box_width, 20 + CHECKLIST_LINE_HEIGHT * 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
@@ -2376,18 +2435,19 @@ def draw_swamp_checklist():
     Draws the swamp's own 3-item checklist, in the same on-screen slot
     the desert's checklist used (only one of the two is ever visible at
     once, since the desert's is hidden by start_swamp_room before this
-    one appears).
+    one appears). The box is sized to fit its own text.
     """
-    checklist_x, checklist_y = SWAMP_CHECKLIST_POS
-    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 3)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
-    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
-
     checklist_items = [
         (SWAMP_INGREDIENT_FLOWER_1_NAME, swamp_ingredient_flower_1_collected),
         (SWAMP_INGREDIENT_FLOWER_2_NAME, swamp_ingredient_flower_2_collected),
         (SWAMP_INGREDIENT_FLOWER_3_NAME, swamp_ingredient_flower_3_collected),
     ]
+    box_width = compute_checklist_box_width([name for name, _ in checklist_items])
+    checklist_x = SCREEN_WIDTH - CHECKLIST_RIGHT_MARGIN - box_width
+    checklist_y = SWAMP_CHECKLIST_POS[1]
+    box_rect = pygame.Rect(checklist_x, checklist_y, box_width, 20 + CHECKLIST_LINE_HEIGHT * 3)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
@@ -2446,33 +2506,34 @@ def draw_bridge():
 
 def draw_tinker_items():
     """
-    Draws the swamp's two scavengeable tinkering parts (the rusty cog and
-    the vine-bound plank), each only for as long as it's still
-    uncollected.
+    Draws the swamp's two scavengeable tinkering parts - the rusty cog
+    (assets/gear.png) and the vine-bound plank (assets/log_good.png) -
+    each only for as long as it's still uncollected. Falls back to the
+    original plain circle if either image hasn't loaded.
     """
     if not tinker_item_1_collected:
-        screen_x, screen_y = world_to_screen(*TINKER_ITEM_1_POS)
-        pygame.draw.circle(screen, TINKER_ITEM_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["gear"], TINKER_ITEM_1_POS, TINKER_ITEM_COLOR, 12)
 
     if not tinker_item_2_collected:
-        screen_x, screen_y = world_to_screen(*TINKER_ITEM_2_POS)
-        pygame.draw.circle(screen, TINKER_ITEM_COLOR, (int(screen_x), int(screen_y)), 12)
+        draw_image_or_circle(IMAGES["log_good"], TINKER_ITEM_2_POS, TINKER_ITEM_COLOR, 12)
 
 
 def draw_swamp_bridge_checklist():
     """
     Draws the bridge-repair checklist (the two tinkering parts), reusing
     the same on-screen slot and post-it styling as the other checklists.
+    The box is sized to fit its own text.
     """
-    checklist_x, checklist_y = SWAMP_CHECKLIST_POS
-    box_rect = pygame.Rect(checklist_x, checklist_y, CHECKLIST_WIDTH, 20 + CHECKLIST_LINE_HEIGHT * 2)
-    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
-    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
-
     checklist_items = [
         (TINKER_ITEM_1_NAME, tinker_item_1_collected),
         (TINKER_ITEM_2_NAME, tinker_item_2_collected),
     ]
+    box_width = compute_checklist_box_width([name for name, _ in checklist_items])
+    checklist_x = SCREEN_WIDTH - CHECKLIST_RIGHT_MARGIN - box_width
+    checklist_y = SWAMP_CHECKLIST_POS[1]
+    box_rect = pygame.Rect(checklist_x, checklist_y, box_width, 20 + CHECKLIST_LINE_HEIGHT * 2)
+    pygame.draw.rect(screen, (245, 235, 200), box_rect, border_radius=10)
+    pygame.draw.rect(screen, BLACK, box_rect, 2, border_radius=10)
     for i, (name, collected) in enumerate(checklist_items):
         line_y = box_rect.y + 10 + i * CHECKLIST_LINE_HEIGHT
         checkbox_rect = pygame.Rect(box_rect.x + 10, line_y + 2, CHECKLIST_CHECKBOX_SIZE, CHECKLIST_CHECKBOX_SIZE)
@@ -2498,60 +2559,29 @@ def draw_swamp_bridge_checklist():
 
 def start_room_timer():
     """
-    Starts (or restarts) the 90-second room timer, used for the desert's
-    ingredient-gathering countdown.
+    The 90-second room timer has been removed entirely (redundant
+    alongside the hearts/HP systems). Intentionally left as a no-op so
+    any existing call to it elsewhere keeps working safely.
     """
-    global room_timer_active, room_timer_start_time
-
-    room_timer_active = True
-    room_timer_start_time = pygame.time.get_ticks()
+    return
 
 
 def update_room_timer():
     """
-    Counts the room timer down, triggering handle_room_timer_expired()
-    the moment it runs out. Does nothing once the timer isn't active.
+    The room timer has been removed entirely - intentionally a no-op
+    now, kept only so any existing call to it elsewhere doesn't break.
     """
-    if not room_timer_active:
-        return
-
-    elapsed = pygame.time.get_ticks() - room_timer_start_time
-    if elapsed >= ROOM_TIMER_DURATION_MS:
-        handle_room_timer_expired()
+    return
 
 
 def draw_room_timer():
     """
-    Draws a clock icon with the remaining seconds underneath it, centered
-    directly beneath the middle heart container (rather than the middle
-    of the whole HP bar) and sized comfortably bigger than a single
-    heart icon so it reads clearly as its own element. Turns red once
-    time is running low (10 seconds or less) as an urgency cue, and
-    otherwise uses a warm, non-white colour so it actually stands out
-    against the background. Falls back to just the text, with no icon,
-    if assets/Clock.png hasn't been supplied yet.
+    The room timer has been removed entirely, so this intentionally no
+    longer draws anything (no clock icon, no "Time left" text). Left in
+    place, rather than deleted outright, purely so any existing call to
+    it elsewhere keeps working safely.
     """
-    elapsed = pygame.time.get_ticks() - room_timer_start_time
-    seconds_left = max(0, (ROOM_TIMER_DURATION_MS - elapsed) // 1000 + 1)
-    color = HP_BAR_COLOR_LOW if seconds_left <= 10 else TIME_LEFT_TEXT_COLOR
-
-    heart_radius = HEART_ICON_SIZE // 2
-    start_x = HP_BAR_POS[0] + heart_radius
-    hp_text_bottom = HP_BAR_POS[1] + HP_BAR_HEIGHT + 4 + hint_font.get_linesize()
-    hearts_bottom = hp_text_bottom + heart_radius + 10 + heart_radius
-    center_x = start_x + 1 * (HEART_ICON_SIZE + 6)  # Directly under the middle (2nd of 3) heart container
-    content_top = hearts_bottom + 12
-
-    if IMAGES["clock"] is not None:
-        clock_rect = IMAGES["clock"].get_rect(midtop=(center_x, content_top))
-        screen.blit(IMAGES["clock"], clock_rect)
-        text_top = clock_rect.bottom + 4
-    else:
-        text_top = content_top
-
-    timer_surface = hint_font.render(f"Time left: {int(seconds_left)}s", True, color)
-    timer_rect = timer_surface.get_rect(midtop=(center_x, text_top))
-    screen.blit(timer_surface, timer_rect)
+    return
 
 
 def handle_room_timer_expired():
@@ -2621,7 +2651,7 @@ def consume_ingredient_flower(which):
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
     dialogue_backdrop_state = "ROOM"
-    dialogue_on_complete = "START_SWAMP_ROOM" if both_collected else None
+    dialogue_on_complete = "START_LOADING_SCREEN" if both_collected else None
     game_state = "DIALOGUE"
 
 
@@ -3241,6 +3271,21 @@ def draw_game_over_screen():
         line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + i * line_height))
         screen.blit(line_surface, line_rect)
 
+    stats_text = (
+        f"Games played: {games_played}   "
+        f"Deaths: {total_deaths}   "
+        f"Total wins: {total_wins}"
+    )
+    stats_surface = hint_font.render(stats_text, True, (200, 200, 200))
+    stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
+    screen.blit(stats_surface, stats_rect)
+
+    stats_surface = hint_font.render(
+        f"Friendship points gained this run: {friendship_points_gained}", True, SOFT_HINT_COLOR
+    )
+    stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 70))
+    screen.blit(stats_surface, stats_rect)
+
     hint_surface = hint_font.render("Press ENTER to try again", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
@@ -3376,7 +3421,9 @@ def draw_win_screen():
     stats_text = (
         f"Time: {last_run_time_ms // 1000}s   "
         f"Best: {fastest_win_time_ms // 1000}s   "
-        f"Total wins: {total_wins}"
+        f"Total wins: {total_wins}   "
+        f"Games played: {games_played}   "
+        f"Deaths: {total_deaths}"
     )
     stats_surface = hint_font.render(stats_text, True, (200, 200, 200))
     stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + len(wrapped_lines) * line_height + 20))
