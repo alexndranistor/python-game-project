@@ -1734,8 +1734,8 @@ def draw_interaction_hint():
         return
 
     screen_x, screen_y = world_to_screen(protagonist["x"], protagonist["y"])
-    hint_surface = hint_font.render("Press E", True, WHITE)
-    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_HEIGHT))
+    hint_surface = hint_font.render("Press E to Interact", True, WHITE)
+    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_HEIGHT // 2 - 20))
     screen.blit(hint_surface, hint_rect)
 
 def show_item_popup(title, description, icon_image=None):
