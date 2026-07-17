@@ -2621,11 +2621,16 @@ def start_rat_following():
     """
     Called once the Rat's healed-and-helped outcome dialogue finishes:
     switches him from his fixed spot into a following companion,
-    positioned right at the protagonist's side from that point on.
+    positioned right at the protagonist's side from that point on,
+    and returns play to the room. (Bugfix: this used to skip setting
+    game_state, leaving it on "DIALOGUE" with current_line_index
+    already past the end of the dialogue that just finished - crashing
+    the very next frame's text reveal with an IndexError.)
     """
-    global rat_state, rat_draw_pos
+    global rat_state, rat_draw_pos, game_state
     rat_state = "FOLLOWING"
     rat_draw_pos = [protagonist["x"] + RAT_FOLLOW_OFFSET[0], protagonist["y"] + RAT_FOLLOW_OFFSET[1]]
+    game_state = "ROOM"
 
 
 def update_rat_companion_animation():
