@@ -32,6 +32,7 @@ WHITE = (255, 255, 255)
 HIGHLIGHT = (255, 215, 0)
 BLACK = (0, 0, 0)
 DESERT_BG = (194, 178, 128)
+SWAMP_BG = (70, 90, 60)
 
 # --- Fonts
 title_font = pygame.font.SysFont(None, 64)
@@ -40,7 +41,7 @@ dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
 # --- Core state machine
-# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER"
+# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER", "WIN"
 game_state = "TITLE"
 
 # --- Title screen menu state
@@ -199,6 +200,7 @@ ice_flower_collected = False
 
 # --- Desert world & camera scrolling --------------------------------------
 DESERT_WORLD_WIDTH = 1600
+SWAMP_WORLD_WIDTH = 1200
 camera_x = 0
 
 # --- Room system (background/world width driven by whichever room is active) ---
@@ -208,6 +210,10 @@ ROOM_CONFIG = {
     "desert": {
         "bg_color": DESERT_BG,
         "world_width": DESERT_WORLD_WIDTH,
+    },
+    "swamp": {
+        "bg_color": SWAMP_BG,
+        "world_width": SWAMP_WORLD_WIDTH,
     },
 }
 
@@ -319,12 +325,19 @@ decoy_weed_interacted = False
 INGREDIENT_WATERED_REACTION = "Sprite's light dips toward the flower, and it blooms back to life in an instant. One down!"
 DECOY_WEED_REACTION = "\"That one's just a common weed - no use to us. Keep looking.\""
 
+SWAMP_TRANSITION_TEXT = [
+    "\"That's both ingredients - let's get this brewed before that fog gets any worse.\"",
+    "A moment later, the potion's mixed and swallowed. The air already feels a little safer to breathe.",
+    "\"Right - that's the swamp taken care of, mostly. Let's move. The sooner we're through, the better.\"",
+]
+
 # --- Hearts / lives system (confirmed core system) ------------------------
 MAX_HEARTS = 3
 hearts = MAX_HEARTS
 checkpoint_state = "ROOM"  # Only one checkpoint exists so far (desert)
 
 GAME_OVER_TEXT = "You've run out of hearts. Take a breath, then try again."
+WIN_TEXT = "You've crossed the swamp safely, potion in hand. Floraborne's balance is one step closer to being restored."
 
 def draw_title_screen():
     """
@@ -462,7 +475,8 @@ def handle_dialogue_input(event):
     line that mentions it, rather than waiting for the whole
     conversation to finish. On the final line, dialogue_on_complete
     decides what happens next: it either chains straight into another
-    dialogue, or simply switches to next_state_after_dialogue as normal.
+    dialogue, switches rooms, or simply switches to next_state_after_dialogue
+    as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -499,6 +513,10 @@ def handle_dialogue_input(event):
                 elif dialogue_on_complete == "START_POTION_RECIPE_INTRO":
                     dialogue_on_complete = None
                     start_potion_recipe_intro_dialogue()
+                elif dialogue_on_complete == "START_SWAMP_ROOM":
+                    dialogue_on_complete = None
+                    start_swamp_room()
+                    game_state = next_state_after_dialogue
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -546,10 +564,10 @@ def draw_room():
     Draw whichever biome is currently active (current_room): the shared
     background/scaffolding (fill colour from ROOM_CONFIG, protagonist,
     sprite companion, interaction hint, control hint) plus that room's
-    own one-off story elements. "desert" is still the only room that
-    exists, so this reads a little desert-specific for now - but a
-    future "swamp" branch can be added here without touching any of
-    the shared drawing/movement/camera code below.
+    own one-off story elements. Right now that's the desert's decoy
+    flower, ice flower, and ingredient checklist; the swamp has no
+    room-specific elements of its own, so this branch is simply skipped
+    while current_room == "swamp".
     """
     screen.fill(ROOM_CONFIG[current_room]["bg_color"])
 
@@ -1525,6 +1543,8 @@ def consume_ingredient_flower(which):
     """
     Waters and collects one of the two real ingredient flowers: ticks it
     off the checklist and plays Sprite's short "one down!" reaction line.
+    If this was the last of the two ingredients needed, chains into the
+    swamp-transition dialogue instead of the normal reaction line.
 
     Args:
         which (str): "ingredient_flower_1" or "ingredient_flower_2".
@@ -1538,13 +1558,15 @@ def consume_ingredient_flower(which):
     elif which == "ingredient_flower_2":
         ingredient_flower_2_collected = True
 
-    dialogue_lines = [INGREDIENT_WATERED_REACTION]
+    both_collected = ingredient_flower_1_collected and ingredient_flower_2_collected
+
+    dialogue_lines = SWAMP_TRANSITION_TEXT if both_collected else [INGREDIENT_WATERED_REACTION]
     current_line_index = 0
     revealed_chars = 0
     last_reveal_time = pygame.time.get_ticks()
     next_state_after_dialogue = "ROOM"
     dialogue_backdrop_state = "ROOM"
-    dialogue_on_complete = None
+    dialogue_on_complete = "START_SWAMP_ROOM" if both_collected else None
     game_state = "DIALOGUE"
 
 
@@ -1567,6 +1589,34 @@ def consume_decoy_weed():
     dialogue_backdrop_state = "ROOM"
     dialogue_on_complete = None
     game_state = "DIALOGUE"
+
+
+def start_swamp_room():
+    """
+    Called once the potion-brewing transition dialogue finishes: switches
+    current_room to "swamp", hides the now-irrelevant potion checklist
+    and its timer, and repositions the protagonist and camera to the
+    start of the new room.
+    """
+    global current_room, camera_x, checklist_visible, room_timer_active
+
+    current_room = "swamp"
+    checklist_visible = False
+    room_timer_active = False
+    protagonist["x"] = 60
+    protagonist["y"] = SCREEN_HEIGHT // 2
+    camera_x = 0
+
+
+def check_swamp_end_trigger():
+    """
+    Once the protagonist reaches the far right edge of the swamp, the
+    game is won.
+    """
+    global game_state
+
+    if protagonist["x"] >= SWAMP_WORLD_WIDTH - PROTAGONIST_SIZE:
+        game_state = "WIN"
 
 
 def draw_game_over_screen():
@@ -1592,37 +1642,86 @@ def draw_game_over_screen():
     screen.blit(hint_surface, hint_rect)
 
 
-def handle_game_over_input(event):
+def reset_run_state():
     """
-    Handles input on the game-over screen: pressing ENTER resets every
-    run-specific counter and returns to the title screen for a fresh
-    attempt.
+    Resets every run-specific counter and flag back to a fresh game's
+    starting values. Shared by the game-over screen and the win screen,
+    since both send the player back to the title screen for a new attempt.
     """
-    global game_state, hearts, hp, sprite_friendship_level, rat_friendship_level
+    global hearts, hp, sprite_friendship_level, rat_friendship_level
     global decoy_flower_eaten, ice_flower_collected, ice_flower_encountered
     global ingredient_flower_1_collected, ingredient_flower_2_collected, decoy_weed_interacted
     global checklist_visible, room_timer_active, heat_drain_active, heat_immune, hp_bar_visible
-    global sprite_true_intro_played, sprite_state
+    global sprite_true_intro_played, sprite_state, current_room, camera_x
+
+    hearts = MAX_HEARTS
+    hp = MAX_HP
+    sprite_friendship_level = 0
+    rat_friendship_level = 0
+    decoy_flower_eaten = False
+    ice_flower_collected = False
+    ice_flower_encountered = False
+    ingredient_flower_1_collected = False
+    ingredient_flower_2_collected = False
+    decoy_weed_interacted = False
+    checklist_visible = False
+    room_timer_active = False
+    heat_drain_active = False
+    heat_immune = False
+    hp_bar_visible = False
+    sprite_true_intro_played = False
+    sprite_state = "HIDDEN"
+    current_room = "desert"
+    camera_x = 0
+    protagonist["x"] = 1200
+    protagonist["y"] = SCREEN_HEIGHT // 2
+
+
+def handle_game_over_input(event):
+    """
+    Handles input on the game-over screen: pressing ENTER resets the run
+    and returns to the title screen for a fresh attempt.
+    """
+    global game_state
 
     if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-        hearts = MAX_HEARTS
-        hp = MAX_HP
-        sprite_friendship_level = 0
-        rat_friendship_level = 0
-        decoy_flower_eaten = False
-        ice_flower_collected = False
-        ice_flower_encountered = False
-        ingredient_flower_1_collected = False
-        ingredient_flower_2_collected = False
-        decoy_weed_interacted = False
-        checklist_visible = False
-        room_timer_active = False
-        heat_drain_active = False
-        heat_immune = False
-        hp_bar_visible = False
-        sprite_true_intro_played = False
-        sprite_state = "HIDDEN"
+        reset_run_state()
         game_state = "TITLE"
+
+
+def handle_win_input(event):
+    """
+    Handles input on the win screen: pressing ENTER resets the run and
+    returns to the title screen, the same as the game-over screen does.
+    """
+    global game_state
+
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+        reset_run_state()
+        game_state = "TITLE"
+
+
+def draw_win_screen():
+    """
+    Draws the win screen shown once the protagonist crosses the swamp
+    safely, with the option to play again from the title screen.
+    """
+    screen.fill((20, 45, 30))
+
+    title_surface = title_font.render("You Made It!", True, WHITE)
+    title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 220))
+    screen.blit(title_surface, title_rect)
+
+    wrapped_lines = wrap_text(WIN_TEXT, dialogue_font, SCREEN_WIDTH - 100)
+    line_height = dialogue_font.get_linesize()
+    for i, line in enumerate(wrapped_lines):
+        line_surface = dialogue_font.render(line, True, WHITE)
+        line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + i * line_height))
+        screen.blit(line_surface, line_rect)
+
+    hint_surface = hint_font.render("Press ENTER to play again", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+    screen.blit(hint_surface, hint_rect)
 
 
 running = True
@@ -1646,6 +1745,8 @@ while running:
             handle_placeholder_input(event)
         elif game_state == "GAME_OVER":
             handle_game_over_input(event)
+        elif game_state == "WIN":
+            handle_win_input(event)
 
     if game_state == "ROOM":
         handle_room_movement()
@@ -1653,10 +1754,12 @@ while running:
         if current_room == "desert":
             check_decoy_flower_trigger()
             check_ice_flower_trigger()
+        elif current_room == "swamp":
+            check_swamp_end_trigger()
 
     update_camera()
 
-    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP", "GAME_OVER"):
+    if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP", "GAME_OVER", "WIN"):
         update_heat_drain()
         update_sprite_animation()
         update_room_timer()
@@ -1691,13 +1794,15 @@ while running:
         draw_placeholder_screen()
     elif game_state == "GAME_OVER":
         draw_game_over_screen()
+    elif game_state == "WIN":
+        draw_win_screen()
 
-    if hp_bar_visible:
+    if hp_bar_visible and game_state != "WIN":
         draw_hp_bar()
         draw_hp_heal_popup()
         draw_hearts()
 
-    if checklist_visible:
+    if checklist_visible and game_state != "WIN":
         draw_checklist()
         draw_room_timer()
 
