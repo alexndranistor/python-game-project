@@ -20,35 +20,35 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("My Game")
 clock = pygame.time.Clock()
 
-# --- Desert control hint (fades out after appearing) 
+# --- Desert control hint (fades out after appearing)
 previous_game_state = None       # Tracks the last frame's game_state, to detect state changes
 desert_hint_start_time = 0       # Timestamp (ms) the player entered the desert room
 HINT_VISIBLE_DURATION = 2000     # How long the control hint stays fully visible (ms)
 HINT_FADE_DURATION = 2000        # How long it takes to fade out after that (ms)
 
-# --- Colours (RGB tuples) 
+# --- Colours (RGB tuples)
 BARREN_BG = (120, 100, 70)
 WHITE = (255, 255, 255)
 HIGHLIGHT = (255, 215, 0)
 BLACK = (0, 0, 0)
 DESERT_BG = (194, 178, 128)
 
-# --- Fonts 
+# --- Fonts
 title_font = pygame.font.SysFont(None, 64)
 menu_font = pygame.font.SysFont(None, 40)
 dialogue_font = pygame.font.SysFont(None, 32)
 hint_font = pygame.font.SysFont(None, 20)
 
-# --- Core state machine 
-# Valid values so far: "TITLE", "DIALOGUE", "DESERT_ROOM" , "PAUSED", "SETTINGS_PLACEHOLDER"
+# --- Core state machine
+# Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "DESERT_ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER"
 game_state = "TITLE"
 
-# --- Title screen menu state 
+# --- Title screen menu state
 selected_option = 0
 menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
-# --- Player data 
+# --- Player data
 PROTAGONIST_SIZE = 40   # Width/height in pixels of the protagonist's placeholder square
 PLAYER_SPEED = 4         # Pixels moved per frame while a direction key is held
 
@@ -116,7 +116,7 @@ DECOY_FLOWER_COLOR = (180, 160, 90)
 decoy_flower_encountered = False
 
 # --- Adding a glow to the decoy flower as well ---------------------------
-DECOY_FLOWER_GLOW_COLOR = (255, 230, 150)   # Warm, inviting gold 
+DECOY_FLOWER_GLOW_COLOR = (255, 230, 150)   # Warm, inviting gold
 DECOY_FLOWER_GLOW_MIN_RADIUS = 18
 DECOY_FLOWER_GLOW_MAX_RADIUS = 26
 DECOY_FLOWER_GLOW_PERIOD = 900               # Milliseconds for one full pulse in and out
@@ -189,7 +189,7 @@ hp_heal_popup_start_time = 0      # pygame.time.get_ticks() value from when it a
 HP_HEAL_POPUP_DURATION_MS = 1500  # How long the heal callout stays on screen, in milliseconds
 
 # --- For allowing sprite tutorial-ish intro.
-dialogue_on_complete = None  
+dialogue_on_complete = None
 
 # --- This is for making "press E to interact" work:
 nearby_interactable = None
@@ -211,6 +211,20 @@ LEFT_ARROW_SIZE = 40
 
 sprite_friendship_level = 0  # How much the sprite likes/trusts the player so far
 decoy_flower_eaten = False   # Whether the player has already eaten the decoy flower or not
+rat_friendship_level = 0     # How much the Rat likes/trusts the player so far (new companion counter)
+
+# --- Reusable dialogue-choice component ---------------------------------
+# Powers every friendship moment in the game (Rat and Sprite alike): 3
+# options worth different friendship points, shown as a simple selectable
+# menu, then chained into a one-line reaction dialogue via the existing
+# dialogue_on_complete system once an option is chosen.
+choice_options = []              # The 3 option strings currently on screen
+choice_deltas = []               # Friendship point change for each option, same order
+choice_reactions = []            # Reaction line shown after picking each option, same order
+choice_friendship_target = None  # "sprite" or "rat" - which counter to update
+choice_on_complete = None        # dialogue_on_complete value to chain into once the reaction line finishes
+choice_selected_option = 0
+choice_option_rects = []
 
 def draw_title_screen():
     """
@@ -246,15 +260,12 @@ def activate_menu_option(option_name):
     global dialogue_backdrop_state, dialogue_on_complete
 
     if option_name == "New Game":
-        # Start the catastrophe intro. Once it finishes, the desert's
-        # own opening dialogue plays next (see start_desert_intro_dialogue),
-        # and only after that does the player get free control.
         dialogue_lines = CATASTROPHE_INTRO_TEXT
         current_line_index = 0
         revealed_chars = 0
         last_reveal_time = pygame.time.get_ticks()
         next_state_after_dialogue = "DESERT_ROOM"
-        dialogue_backdrop_state = None  # No gameplay scene exists yet behind the intro
+        dialogue_backdrop_state = None
         dialogue_on_complete = "START_DESERT_INTRO"
         game_state = "DIALOGUE"
     elif option_name == "Quit":
@@ -295,14 +306,6 @@ def wrap_text(text, font, max_width):
     """
     Split a string of text into a list of lines, each narrow enough to fit
     within max_width pixels when rendered in the given font.
-
-    Args:
-        text (str): The text to wrap.
-        font (pygame.font.Font): The font the text will be rendered in.
-        max_width (int): The maximum width, in pixels, a single line may occupy.
-
-    Returns:
-        list[str]: The text split into wrapped lines.
     """
     words = text.split(" ")
     lines = []
@@ -324,12 +327,7 @@ def wrap_text(text, font, max_width):
 
 def draw_text_box(text):
     """
-    Draw the scrolling dialogue box at the bottom of the screen, containing
-    the given text (wrapped to fit inside the box), plus a small hint
-    telling the player how to advance the dialogue.
-
-    Args:
-        text (str): The (possibly partially revealed) text to display.
+    Draw the scrolling dialogue box at the bottom of the screen.
     """
     box_rect = pygame.Rect(50, 420, SCREEN_WIDTH - 100, 150)
     pygame.draw.rect(screen, BLACK, box_rect)
@@ -351,8 +349,7 @@ def draw_text_box(text):
 
 def update_text_reveal():
     """
-    Advance the typewriter-style text reveal by one character, if enough
-    time has passed since the last character was revealed.
+    Advance the typewriter-style text reveal by one character.
     """
     global revealed_chars, last_reveal_time
     current_time = pygame.time.get_ticks()
@@ -368,9 +365,8 @@ def handle_dialogue_input(event):
     Handle player input while a dialogue text box is active. Both
     pressing Enter/Space and left-clicking the mouse advance the dialogue.
     On the final line, dialogue_on_complete decides what happens next: it
-    either chains straight into another dialogue (currently used to move
-    from the catastrophe intro into the desert's own opening dialogue),
-    or simply switches to next_state_after_dialogue as normal.
+    either chains straight into another dialogue, or simply switches to
+    next_state_after_dialogue as normal.
 
     Args:
         event (pygame.event.Event): The event to process.
@@ -398,11 +394,7 @@ def handle_dialogue_input(event):
 
 def start_desert_intro_dialogue():
     """
-    Kicks off the desert's own opening dialogue (DESERT_INTRO_TEXT), shown
-    as a normal dialogue box with the desert room drawn behind it. Runs
-    once, right after the catastrophe intro finishes; once the player
-    clicks/presses through to its last line ("Look around..."), the
-    dialogue box disappears and free movement begins as usual.
+    Kicks off the desert's own opening dialogue (DESERT_INTRO_TEXT).
     """
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
     global next_state_after_dialogue, dialogue_backdrop_state, game_state
@@ -418,8 +410,7 @@ def start_desert_intro_dialogue():
 def handle_desert_movement():
     """
     Update the protagonist's position based on which movement keys are
-    currently held down (arrow keys or WASD), keeping them within the
-    bounds of the wider desert world (not just the visible screen).
+    currently held down (arrow keys or WASD).
     """
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -442,10 +433,6 @@ def draw_desert_room():
     once eaten), the ice flower placeholder (with its attention-grabbing
     glow, hidden once collected), the sprite companion, the protagonist,
     a "Press E" interaction hint, and a fading movement-control hint.
-    The opening description now plays once as its own dialogue instead
-    of being drawn permanently here (see start_desert_intro_dialogue).
-    The HP bar is drawn separately by the main loop, since it needs to
-    stay visible across every game state, not just this one.
     """
     screen.fill(DESERT_BG)
 
@@ -468,21 +455,17 @@ def draw_desert_room():
 
 def draw_control_hint():
     """
-    Draw a temporary "Use ARROW KEYS or WASD to move" prompt near the
-    bottom of the desert room, shown briefly when the player first
-    arrives and then fading out, similar to the on-screen control
-    reminders most games show when you enter a new area.
+    Draw a temporary "Use ARROW KEYS or WASD to move" prompt.
     """
     elapsed = pygame.time.get_ticks() - desert_hint_start_time
     total_duration = HINT_VISIBLE_DURATION + HINT_FADE_DURATION
 
     if elapsed >= total_duration:
-        return  # The hint has fully finished; nothing left to draw.
+        return
 
     if elapsed <= HINT_VISIBLE_DURATION:
-        alpha = 255  # Fully visible
+        alpha = 255
     else:
-        # Linearly fade from fully visible (255) down to invisible (0).
         fade_elapsed = elapsed - HINT_VISIBLE_DURATION
         alpha = max(0, 255 - int((fade_elapsed / HINT_FADE_DURATION) * 255))
 
@@ -493,12 +476,7 @@ def draw_control_hint():
 
 def handle_desert_room_input(event):
     """
-    Handle discrete (single-press) events while the desert room is
-    active - currently just opening the pause menu with ESCAPE. Continuous
-    movement is handled separately in handle_desert_movement().
-
-    Args:
-        event (pygame.event.Event): The event to process.
+    Handle discrete (single-press) events while the desert room is active.
     """
     global game_state, paused_from_state, pause_selected_option
 
@@ -514,9 +492,7 @@ def handle_desert_room_input(event):
 
 def draw_pause_menu():
     """
-    Draw the pause menu: a simple dark screen with "Paused" and three
-    selectable options (Settings, Save, Quit Game), shown when the player
-    presses ESCAPE during gameplay.
+    Draw the pause menu.
     """
     global pause_option_rects
     screen.fill((20, 20, 20))
@@ -540,9 +516,6 @@ def draw_pause_menu():
 def activate_pause_option(option_name):
     """
     Perform whatever should happen when a pause menu option is chosen.
-
-    Args:
-        option_name (str): The label of the chosen option.
     """
     global game_state
 
@@ -557,17 +530,13 @@ def activate_pause_option(option_name):
 
 def handle_pause_input(event):
     """
-    Handle a single Pygame event while the pause menu is active: keyboard
-    navigation, mouse hover/click, and resuming with ESCAPE.
-
-    Args:
-        event (pygame.event.Event): The event to process.
+    Handle a single Pygame event while the pause menu is active.
     """
     global pause_selected_option, game_state
 
     if event.type == pygame.KEYDOWN:
         if event.key == pygame.K_ESCAPE:
-            game_state = paused_from_state  # Resume the paused gameplay state
+            game_state = paused_from_state
         elif event.key == pygame.K_UP:
             pause_selected_option = (pause_selected_option - 1) % len(pause_menu_options)
         elif event.key == pygame.K_DOWN:
@@ -588,9 +557,7 @@ def handle_pause_input(event):
 
 def draw_placeholder_screen():
     """
-    Draw a simple "coming soon" screen for a feature that doesn't exist
-    yet (Settings or Save), using the title/message stored in
-    PLACEHOLDER_SCREENS for whichever placeholder state is currently active.
+    Draw a simple "coming soon" screen for Settings or Save.
     """
     screen.fill((20, 20, 20))
     title_text, message_text = PLACEHOLDER_SCREENS[game_state]
@@ -612,11 +579,7 @@ def draw_placeholder_screen():
 
 def handle_placeholder_input(event):
     """
-    Handle input on a placeholder screen (Settings or Save): pressing
-    ESCAPE returns to the pause menu.
-
-    Args:
-        event (pygame.event.Event): The event to process.
+    Handle input on a placeholder screen.
     """
     global game_state
     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -624,9 +587,7 @@ def handle_placeholder_input(event):
 
 def draw_decoy_flower():
     """
-    Draw the desert's decoy flower, a plain, common-looking flower that
-    has no real use, placed to tempt the player into picking it before
-    the sprite stops them.
+    Draw the desert's decoy flower.
     """
     screen_x, screen_y = world_to_screen(*DECOY_FLOWER_POS)
     pygame.draw.circle(screen, DECOY_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
@@ -634,8 +595,7 @@ def draw_decoy_flower():
 def check_decoy_flower_trigger():
     """
     Check whether the protagonist has walked close enough to the decoy
-    flower to trigger the sprite's warning dialogue. Only fires once per
-    playthrough, tracked via decoy_flower_encountered.
+    flower to trigger the sprite's warning dialogue.
     """
     global decoy_flower_encountered, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue, game_state
@@ -664,9 +624,7 @@ def check_decoy_flower_trigger():
 
 def draw_sprite_character():
     """
-    Draw the sprite companion at her current animated position (see
-    update_sprite_animation), converted from world to screen coordinates,
-    once she's made her first appearance.
+    Draw the sprite companion at her current animated position.
     """
     if sprite_state == "HIDDEN":
         return
@@ -676,12 +634,6 @@ def draw_sprite_character():
 def activate_heat_drain():
     """
     Turn on the desert heat's HP drain and reset its internal timer.
-    Called as soon as the player first enters the desert room (see the
-    main loop), so the heat starts affecting them right away rather
-    than waiting for the sprite's warning dialogue to finish. Does
-    nothing once heat_immune is True (i.e. once the ice flower has
-    already been eaten), so the heat can never accidentally come back
-    on later.
     """
     global heat_drain_active, last_hp_tick_time
 
@@ -697,10 +649,7 @@ def activate_heat_drain():
 def update_heat_drain():
     """
     Drain the protagonist's HP by 1 point per second while heat_drain_active
-    is True, simulating the desert heat's ongoing effect until it's cured.
-    HP is floored at 0. Also stops immediately (and for good) once
-    heat_immune is True, as a second safeguard alongside heat_drain_active
-    already being turned off in consume_ice_flower().
+    is True.
     """
     global hp, last_hp_tick_time
 
@@ -715,9 +664,7 @@ def update_heat_drain():
 
 def update_sprite_animation():
     """
-    Update the sprite companion's on-screen position: fly in from above
-    the screen when she first appears, then settle into a gentle
-    up-and-down hover near the protagonist, like a bird flying on the spot.
+    Update the sprite companion's on-screen position.
     """
     global sprite_state, sprite_draw_pos
 
@@ -746,18 +693,14 @@ def update_sprite_animation():
 
 def world_to_screen(world_x, world_y):
     """
-    Convert a position in world coordinates (used for gameplay logic,
-    e.g. distance checks) into screen coordinates (used for drawing),
-    by subtracting the camera's current horizontal scroll offset.
+    Convert a position in world coordinates into screen coordinates.
     """
     return world_x - camera_x, world_y
 
 
 def update_camera():
     """
-    Keeping the camera roughly centred on the protagonist as they move
-    through the desert world, clamped so it never scrolls past either
-    edge of that world.
+    Keep the camera roughly centred on the protagonist.
     """
     global camera_x
     target_camera_x = protagonist["x"] - SCREEN_WIDTH // 2
@@ -766,9 +709,7 @@ def update_camera():
 
 def draw_ice_flower():
     """
-    Draw a placeholder for the ice flower: a pale, icy-coloured circle
-    marking where the real ice flower (and its logic) will be built
-    in a future step.
+    Draw a placeholder for the ice flower.
     """
     screen_x, screen_y = world_to_screen(*ICE_FLOWER_POS)
     pygame.draw.circle(screen, ICE_FLOWER_COLOR, (int(screen_x), int(screen_y)), 12)
@@ -776,8 +717,7 @@ def draw_ice_flower():
 def check_ice_flower_trigger():
     """
     Once the protagonist gets close enough to the ice flower, have the
-    sprite point it out (which also starts the glow, since that's drawn
-    conditionally on ice_flower_encountered). Only happens once.
+    sprite point it out.
     """
     global game_state, dialogue_lines, current_line_index, revealed_chars
     global last_reveal_time, next_state_after_dialogue, dialogue_backdrop_state
@@ -803,20 +743,15 @@ def check_ice_flower_trigger():
 
 def draw_ice_flower_glow():
     """
-    Draw a soft, pulsing glow around the ice flower to draw the player's
-    eye to it, once the sprite has pointed it out. The radius oscillates
-    smoothly between a min and max value using a sine wave, the same
-    technique used for the sprite's idle hover.
+    Draw a soft, pulsing glow around the ice flower.
     """
     pulse_progress = (pygame.time.get_ticks() % ICE_FLOWER_GLOW_PERIOD) / ICE_FLOWER_GLOW_PERIOD
-    pulse = math.sin(pulse_progress * 2 * math.pi)  # Oscillates between -1 and 1
+    pulse = math.sin(pulse_progress * 2 * math.pi)
     radius = int(
         ICE_FLOWER_GLOW_MIN_RADIUS
         + (pulse + 1) / 2 * (ICE_FLOWER_GLOW_MAX_RADIUS - ICE_FLOWER_GLOW_MIN_RADIUS)
     )
 
-    # A separate surface with per-pixel alpha lets the glow be semi-transparent,
-    # which a plain pygame.draw.circle() straight onto the screen can't do.
     glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
     pygame.draw.circle(glow_surface, (*ICE_FLOWER_GLOW_COLOR, 90), (radius, radius), radius)
 
@@ -826,12 +761,10 @@ def draw_ice_flower_glow():
 
 def draw_decoy_flower_glow():
     """
-    Draw a soft, pulsing glow around the decoy flower, visible from the
-    very start, to entice the player into walking toward it before the
-    sprite ever shows up to stop them.
+    Draw a soft, pulsing glow around the decoy flower.
     """
     pulse_progress = (pygame.time.get_ticks() % DECOY_FLOWER_GLOW_PERIOD) / DECOY_FLOWER_GLOW_PERIOD
-    pulse = math.sin(pulse_progress * 2 * math.pi)  # Oscillates between -1 and 1
+    pulse = math.sin(pulse_progress * 2 * math.pi)
     radius = int(
         DECOY_FLOWER_GLOW_MIN_RADIUS
         + (pulse + 1) / 2 * (DECOY_FLOWER_GLOW_MAX_RADIUS - DECOY_FLOWER_GLOW_MIN_RADIUS)
@@ -846,10 +779,7 @@ def draw_decoy_flower_glow():
 
 def draw_left_arrow_hint():
     """
-    Draw a flashing, left-pointing arrow to reinforce the
-    sprite's "go left" line. It blinks on and off by checking the
-    current time against LEFT_ARROW_FLASH_PERIOD, the same trick
-    used elsewhere for the fading control hint.
+    Draw a flashing, left-pointing arrow.
     """
     is_visible = (pygame.time.get_ticks() % LEFT_ARROW_FLASH_PERIOD) < (LEFT_ARROW_FLASH_PERIOD // 2)
     if not is_visible:
@@ -858,9 +788,9 @@ def draw_left_arrow_hint():
     center_x, center_y = LEFT_ARROW_CENTER
     half = LEFT_ARROW_SIZE // 2
     arrow_points = [
-        (center_x - half, center_y),        # Left tip
-        (center_x + half, center_y - half),  # Top right corner
-        (center_x + half, center_y + half),  # Bottom right corner
+        (center_x - half, center_y),
+        (center_x + half, center_y - half),
+        (center_x + half, center_y + half),
     ]
     pygame.draw.polygon(screen, LEFT_ARROW_COLOR, arrow_points)
 
@@ -869,11 +799,7 @@ def update_nearby_interactable():
     """
     Every frame, re-checks how close the protagonist currently is to each
     interactable object in the desert room, and updates nearby_interactable
-    to whichever single one (if any) is currently in range. Runs
-    independently of the one-off dialogue triggers in
-    check_ice_flower_trigger() and check_decoy_flower_trigger(), so E
-    keeps working correctly every time the player is back in range.
-
+    to whichever single one (if any) is currently in range.
     """
     global nearby_interactable
 
@@ -905,10 +831,8 @@ def handle_interaction_key():
 
 def consume_ice_flower():
     """
-    Eating the ice flower restores 80 HP (capped at MAX_HP) and grants
-    permanent immunity to the desert heat, so it can never drain HP
-    again for the rest of the playthrough. Also shows the item info
-    popup and a floating "+80 HP" callout explaining what just happened.
+    Eating the ice flower restores 80 HP and grants permanent immunity to
+    the desert heat.
     """
     global ice_flower_collected, hp, heat_drain_active, heat_immune
 
@@ -926,9 +850,7 @@ def consume_ice_flower():
 
 def consume_decoy_flower():
     """
-    Reaction to eating the decoy flower after being warned not to. Costs
-    the player one friendship point with the sprite (floored at 0) and
-    triggers her disappointed reaction dialogue. Only happens once.
+    Reaction to eating the decoy flower after being warned not to.
     """
     global decoy_flower_eaten, sprite_friendship_level
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
@@ -952,7 +874,6 @@ def consume_decoy_flower():
 def draw_interaction_hint():
     """
     Draws a 'Press E' prompt above the protagonist when something interactable is in range.
-    
     """
     if nearby_interactable is None:
         return
@@ -964,10 +885,7 @@ def draw_interaction_hint():
 
 def show_item_popup(title, description, icon_path=None):
     """
-    Opens the small item-info popup window: a title, a short description,
-    and either a real icon image (once icon_path points to a real file)
-    or a placeholder square for now. Used for any item that should show
-    information the moment it's consumed, like the ice flower.
+    Opens the small item-info popup window.
     """
     global item_popup_title, item_popup_description, item_popup_icon_path
     global previous_state_before_popup, game_state
@@ -980,9 +898,7 @@ def show_item_popup(title, description, icon_path=None):
 
 def draw_item_popup():
     """
-    Draws the desert scene behind a centered popup box containing the
-    item's icon (a placeholder square until real art exists), title, and
-    wrapped description text, plus a hint to close it.
+    Draws the desert scene behind a centered popup box.
     """
     draw_desert_room()
 
@@ -993,7 +909,7 @@ def draw_item_popup():
 
     icon_rect = pygame.Rect(box_rect.x + 20, box_rect.y + 20, ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE)
     if item_popup_icon_path is None:
-        pygame.draw.rect(screen, (150, 150, 150), icon_rect)  # Placeholder until real art exists
+        pygame.draw.rect(screen, (150, 150, 150), icon_rect)
     else:
         icon_surface = pygame.image.load(item_popup_icon_path).convert_alpha()
         icon_surface = pygame.transform.scale(icon_surface, (ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE))
@@ -1030,9 +946,7 @@ def handle_item_popup_input(event):
 
 def get_hp_bar_color(current_hp):
     """
-    Returns the hex color the HP bar should currently be drawn in, based
-    on fixed thresholds: green at 70+, orange from 30-69, and red below
-    30.
+    Returns the hex color the HP bar should currently be drawn in.
     """
     if current_hp >= 70:
         return HP_BAR_COLOR_HIGH
@@ -1043,12 +957,7 @@ def get_hp_bar_color(current_hp):
 
 def draw_hp_bar():
     """
-    Draws the HP bar in the corner of the screen: a white outline, a
-    fill proportional to current HP colored using get_hp_bar_color()
-    (green/orange/red based on fixed thresholds), and a numeric
-    "HP: x/100" readout underneath. Called every frame once
-    hp_bar_visible is True, regardless of game state, so it stays on
-    screen for the rest of the game.
+    Draws the HP bar in the corner of the screen.
     """
     bar_x, bar_y = HP_BAR_POS
     outline_rect = pygame.Rect(bar_x, bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
@@ -1064,8 +973,7 @@ def draw_hp_bar():
 
 def show_hp_heal_popup(amount_healed):
     """
-    Starts a short-lived floating "+<amount> HP" text callout, shown in
-    green just under the HP bar to confirm a heal just happened.
+    Starts a short-lived floating "+<amount> HP" text callout.
     """
     global hp_heal_popup_text, hp_heal_popup_start_time
 
@@ -1074,10 +982,7 @@ def show_hp_heal_popup(amount_healed):
 
 def render_outlined_text(text, font, fill_color, outline_color, outline_width=2):
     """
-    Renders text with a solid outline behind it, by drawing the outline
-    colour at a ring of offsets around the text and the fill colour on
-    top, dead centre. Used for the HP heal callout so it stays readable
-    against any background colour.
+    Renders text with a solid outline behind it.
     """
     base_surface = font.render(text, True, fill_color)
     outline_surface = pygame.Surface(
@@ -1098,9 +1003,7 @@ def render_outlined_text(text, font, fill_color, outline_color, outline_width=2)
 
 def draw_hp_heal_popup():
     """
-    Draws the floating "+80 HP" text (green fill, black outline) just
-    above the sprite while it's still within its display duration, then
-    stops automatically once that time has passed.
+    Draws the floating "+80 HP" text while it's still within its display duration.
     """
     if hp_heal_popup_text is None:
         return
@@ -1119,6 +1022,123 @@ def draw_hp_heal_popup():
     screen.blit(popup_surface, popup_rect)
 
 
+def start_dialogue_choice(options, deltas, reactions, target, on_complete):
+    """
+    Opens the reusable 3-option dialogue-choice menu, used for every
+    Rat/Sprite friendship moment in the game.
+
+    Args:
+        options (list[str]): The 3 option strings to show, warmest first.
+        deltas (list[int]): Friendship points awarded for each option, same order.
+        reactions (list[str]): Reaction line shown after picking each option, same order.
+        target (str): "sprite" or "rat" - which friendship counter to update.
+        on_complete (str): dialogue_on_complete value to chain into once the
+            chosen reaction line finishes playing.
+    """
+    global choice_options, choice_deltas, choice_reactions, choice_friendship_target
+    global choice_on_complete, choice_selected_option, game_state
+
+    choice_options = options
+    choice_deltas = deltas
+    choice_reactions = reactions
+    choice_friendship_target = target
+    choice_on_complete = on_complete
+    choice_selected_option = 0
+    game_state = "DIALOGUE_CHOICE"
+
+
+def resolve_dialogue_choice(index):
+    """
+    Applies the friendship point change for the chosen option, then plays
+    its reaction line as a normal one-line dialogue, chaining onward via
+    choice_on_complete once that line finishes.
+
+    Args:
+        index (int): Which option (0, 1, or 2) the player picked.
+    """
+    global sprite_friendship_level, rat_friendship_level
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    delta = choice_deltas[index]
+    if choice_friendship_target == "sprite":
+        sprite_friendship_level = max(0, sprite_friendship_level + delta)
+    elif choice_friendship_target == "rat":
+        rat_friendship_level = max(0, rat_friendship_level + delta)
+
+    dialogue_lines = [choice_reactions[index]]
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = choice_on_complete
+    game_state = "DIALOGUE"
+
+
+def draw_dialogue_choice():
+    """
+    Draws the current dialogue backdrop with the 3-option choice menu
+    overlaid in a tall text box near the bottom of the screen.
+    """
+    global choice_option_rects
+
+    if dialogue_backdrop_state == "DESERT_ROOM":
+        draw_desert_room()
+    else:
+        screen.fill(BARREN_BG)
+
+    box_rect = pygame.Rect(50, 330, SCREEN_WIDTH - 100, 240)
+    pygame.draw.rect(screen, BLACK, box_rect)
+    pygame.draw.rect(screen, WHITE, box_rect, 3)
+
+    max_text_width = box_rect.width - 40
+    line_height = dialogue_font.get_linesize()
+
+    choice_option_rects = []
+    current_y = box_rect.y + 15
+    for i, option_text in enumerate(choice_options):
+        color = HIGHLIGHT if i == choice_selected_option else WHITE
+        wrapped_lines = wrap_text(option_text, dialogue_font, max_text_width)
+        option_top = current_y
+        for line in wrapped_lines:
+            line_surface = dialogue_font.render(line, True, color)
+            line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, current_y))
+            screen.blit(line_surface, line_rect)
+            current_y += line_height
+        option_bottom = current_y
+        choice_option_rects.append(pygame.Rect(box_rect.x + 20, option_top, max_text_width, option_bottom - option_top))
+        current_y += 6
+
+    hint_surface = hint_font.render("Use UP/DOWN and ENTER to choose", True, (180, 180, 180))
+    hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
+    screen.blit(hint_surface, hint_rect)
+
+
+def handle_dialogue_choice_input(event):
+    """
+    Handles input while the dialogue-choice menu is open.
+    """
+    global choice_selected_option
+
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_UP:
+            choice_selected_option = (choice_selected_option - 1) % len(choice_options)
+        elif event.key == pygame.K_DOWN:
+            choice_selected_option = (choice_selected_option + 1) % len(choice_options)
+        elif event.key == pygame.K_RETURN:
+            resolve_dialogue_choice(choice_selected_option)
+
+    elif event.type == pygame.MOUSEMOTION:
+        for i, rect in enumerate(choice_option_rects):
+            if rect.collidepoint(event.pos):
+                choice_selected_option = i
+
+    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        for i, rect in enumerate(choice_option_rects):
+            if rect.collidepoint(event.pos):
+                resolve_dialogue_choice(i)
+
 
 running = True
 while running:
@@ -1129,6 +1149,8 @@ while running:
             handle_title_input(event)
         elif game_state == "DIALOGUE":
             handle_dialogue_input(event)
+        elif game_state == "DIALOGUE_CHOICE":
+            handle_dialogue_choice_input(event)
         elif game_state == "DESERT_ROOM":
             handle_desert_room_input(event)
         elif game_state == "ITEM_POPUP":
@@ -1144,12 +1166,6 @@ while running:
         check_ice_flower_trigger()
         update_nearby_interactable()
 
-    # Kept outside the DESERT_ROOM-only block above so the camera is
-    # already centred on the protagonist even while the desert scene is
-    # only being drawn as a dialogue backdrop (e.g. the desert's opening
-    # dialogue, or the sprite's warning) - otherwise it stayed at its
-    # initial value (the world's left edge) until DESERT_ROOM itself
-    # actually became the active game_state.
     update_camera()
 
     if game_state not in ("PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "ITEM_POPUP"):
@@ -1174,6 +1190,8 @@ while running:
         if current_line == "\"Quick - go left! There should be a flower that way that can help you.\"":
             draw_left_arrow_hint()
         draw_text_box(current_line[:revealed_chars])
+    elif game_state == "DIALOGUE_CHOICE":
+        draw_dialogue_choice()
     elif game_state == "DESERT_ROOM":
         draw_desert_room()
     elif game_state == "ITEM_POPUP":
@@ -1191,4 +1209,3 @@ while running:
     clock.tick(60)
 
 pygame.quit()
-
