@@ -144,6 +144,9 @@ ICE_FLOWER_GLOW_PERIOD = 900
 ICE_FLOWER_HINT_TEXT = [
     "\"Look - that one over there! Press E to pick it up!\"",
 ]
+WRONG_FLOWER_BEFORE_ICE_TEXT = [
+    "\"Does that look like the right flower to you? Gosh, your botanical knowledge is poor. Keep going left!\"",
+]
 SPRITE_FLOWER_WARNING_TEXT = [
     "A small butterfly darts out of nowhere, wings glowing faintly, and hovers right in front of you.",
     "\"Wait, wait, WAIT - don't pick that!\"",
@@ -1608,6 +1611,12 @@ def update_nearby_interactable():
             nearby_interactable = "ice_flower"
         elif not decoy_flower_eaten and decoy_distance <= DECOY_FLOWER_RADIUS:
             nearby_interactable = "decoy_flower"
+        elif not ice_flower_collected and ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "early_ingredient_flower_1"
+        elif not ice_flower_collected and ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
+            nearby_interactable = "early_ingredient_flower_2"
+        elif not ice_flower_collected and decoy_weed_distance <= DECOY_WEED_TRIGGER_RADIUS:
+            nearby_interactable = "early_decoy_weed"
         elif checklist_visible and not ingredient_flower_1_collected and ingredient_1_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
             nearby_interactable = "ingredient_flower_1"
         elif checklist_visible and not ingredient_flower_2_collected and ingredient_2_distance <= INGREDIENT_FLOWER_TRIGGER_RADIUS:
@@ -1697,6 +1706,8 @@ def handle_interaction_key():
         consume_ice_flower()
     elif nearby_interactable == "decoy_flower":
         consume_decoy_flower()
+    elif nearby_interactable in ("early_ingredient_flower_1", "early_ingredient_flower_2", "early_decoy_weed"):
+        react_to_wrong_flower_before_ice()
     elif nearby_interactable == "ingredient_flower_1":
         consume_ingredient_flower("ingredient_flower_1")
     elif nearby_interactable == "ingredient_flower_2":
@@ -1762,6 +1773,26 @@ def consume_decoy_flower():
     dialogue_on_complete = None
     game_state = "DIALOGUE"
 
+def react_to_wrong_flower_before_ice():
+    """
+    Reaction to trying to interact with any of the desert's other flowers
+    (the two later ingredient flowers, or the decoy weed) before the ice
+    flower has actually been picked up. Purely a flavour line redirecting
+    the player back toward the ice flower - it doesn't collect or affect
+    anything, and can happen as many times as the player keeps trying.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = WRONG_FLOWER_BEFORE_ICE_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "ROOM"
+    dialogue_backdrop_state = "ROOM"
+    dialogue_on_complete = None
+    game_state = "DIALOGUE"
+
 def draw_interaction_hint():
     """
     Draws a 'Press E' prompt directly above whichever interactable object is
@@ -1782,6 +1813,9 @@ def draw_interaction_hint():
         "ingredient_flower_1": INGREDIENT_FLOWER_1_POS,
         "ingredient_flower_2": INGREDIENT_FLOWER_2_POS,
         "decoy_weed": DECOY_WEED_POS,
+        "early_ingredient_flower_1": INGREDIENT_FLOWER_1_POS,
+        "early_ingredient_flower_2": INGREDIENT_FLOWER_2_POS,
+        "early_decoy_weed": DECOY_WEED_POS,
         "swamp_ingredient_flower_1": SWAMP_INGREDIENT_FLOWER_1_POS,
         "swamp_ingredient_flower_2": SWAMP_INGREDIENT_FLOWER_2_POS,
         "swamp_ingredient_flower_3": SWAMP_INGREDIENT_FLOWER_3_POS,
