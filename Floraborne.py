@@ -15,7 +15,7 @@ pygame.init()
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("My Game")
+pygame.display.set_caption("Floraborne")
 clock = pygame.time.Clock()
 
 # --- Desert control hint (fades out after appearing)
@@ -63,7 +63,8 @@ menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
 # --- Player data
-PROTAGONIST_SIZE = 72
+PROTAGONIST_SIZE = 76
+PROTAGONIST_HEIGHT = 108
 PLAYER_SPEED = 4
 protagonist = {
     "name": "Protagonist",
@@ -114,8 +115,10 @@ dialogue_backdrop_state = None
 # --- Desert biome opening dialogue -------------------------------------------------
 DESERT_INTRO_TEXT = [
     "The heat is immediate and overwhelming.",
-    "Sand stretches in every direction, and a long stretch of withered flowers in the distance creates a sad, pensive atmosphere.",
-    "This place is dangerous - keep an eye on your health, the heat is already starting to get to you.",
+    "Sand stretches in every direction.",
+    "A long stretch of withered flowers sits in the distance, sad and pensive.",
+    "This place is dangerous - keep an eye on your health.",
+    "The heat is already starting to get to you.",
     "Look around... there might be something nearby that can help.",
 ]
 
@@ -611,7 +614,7 @@ def load_sheet_frame(path, crop_box, size=None):
 # startup. Anything not yet supplied simply stays None, and every draw
 # function below already falls back to its original plain shape in that case.
 IMAGES = {
-    "protagonist": load_image_safe("assets/protagonist.png", (PROTAGONIST_SIZE, PROTAGONIST_SIZE)),
+    "protagonist": load_image_safe("assets/protagonist.png", (PROTAGONIST_SIZE, PROTAGONIST_HEIGHT)),
     "sprite": load_sheet_frame("assets/sprite_spritesheet.png", (2, 2, 16, 12), (SPRITE_CHAR_RADIUS * 2, SPRITE_CHAR_RADIUS * 2)),
     "rat": load_sheet_frame("assets/grumpy_rat.png", (0, 0, 32, 32), (32, 32)),
     "decoy_flower_desert": load_image_safe("assets/Flower 8 - PINK.png", (32, 32)),
@@ -725,7 +728,7 @@ def draw_title_screen():
     global menu_option_rects
     draw_vertical_gradient(TITLE_BG_TOP, TITLE_BG_BOTTOM)
 
-    title_surface = title_font.render("MY GAME TITLE", True, TITLE_TEXT_COLOR)
+    title_surface = title_font.render("FLORABORNE", True, TITLE_TEXT_COLOR)
     title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150))
     screen.blit(title_surface, title_rect)
 
@@ -824,15 +827,25 @@ def wrap_text(text, font, max_width):
 
 def draw_text_box(text):
     """
-    Draw the scrolling dialogue box at the bottom of the screen.
+    Draw the scrolling dialogue box at the bottom of the screen. The box's
+    height grows to fit however many wrapped lines the current text needs
+    (instead of a fixed height), growing upward from a fixed bottom margin,
+    so long lines never spill past the box edges or collide with the
+    "Press SPACE to continue" hint or anything else on screen.
     """
-    box_rect = pygame.Rect(50, 420, SCREEN_WIDTH - 100, 150)
-    pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
-    pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
-
-    max_text_width = box_rect.width - 40
+    box_width = SCREEN_WIDTH - 100
+    max_text_width = box_width - 40
     wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
     line_height = dialogue_font.get_linesize()
+
+    content_height = 20 + line_height * len(wrapped_lines) + 30
+    box_height = max(150, content_height)
+    box_bottom = SCREEN_HEIGHT - 30
+    box_top = max(180, box_bottom - box_height)
+    box_rect = pygame.Rect(50, box_top, box_width, box_bottom - box_top)
+
+    pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
+    pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
     for i, line in enumerate(wrapped_lines):
         line_surface = dialogue_font.render(line, True, WHITE)
@@ -1058,12 +1071,13 @@ def handle_room_movement():
         protagonist["y"] += PLAYER_SPEED
 
     room_width = ROOM_CONFIG[current_room]["world_width"]
-    half_size = PROTAGONIST_SIZE // 2
-    protagonist["x"] = max(half_size, min(room_width - half_size, protagonist["x"]))
-    protagonist["y"] = max(half_size, min(SCREEN_HEIGHT - half_size, protagonist["y"]))
+    half_width = PROTAGONIST_SIZE // 2
+    half_height = PROTAGONIST_HEIGHT // 2
+    protagonist["x"] = max(half_width, min(room_width - half_width, protagonist["x"]))
+    protagonist["y"] = max(half_height, min(SCREEN_HEIGHT - half_height, protagonist["y"]))
 
     if current_room == "swamp" and not swamp_bridge_fixed:
-        protagonist["x"] = min(protagonist["x"], SWAMP_BRIDGE_X - half_size)
+        protagonist["x"] = min(protagonist["x"], SWAMP_BRIDGE_X - half_width)
 
 
 def draw_room():
@@ -1087,14 +1101,11 @@ def draw_room():
         if not ice_flower_collected:
             draw_ice_flower_glow()
             draw_ice_flower()
-        if checklist_visible:
-            draw_ingredient_flowers()
+        draw_ingredient_flowers()
     elif current_room == "swamp":
         draw_swamp_background()
-        if swamp_checklist_visible:
-            draw_swamp_flowers()
-        if swamp_bridge_checklist_visible:
-            draw_tinker_items()
+        draw_swamp_flowers()
+        draw_tinker_items()
         draw_bridge()
         if swamp_bridge_fixed and rat_state != "FOLLOWING":
             draw_rat()
@@ -1106,7 +1117,7 @@ def draw_room():
     draw_interaction_hint()
 
     protagonist_screen_x, protagonist_screen_y = world_to_screen(protagonist["x"], protagonist["y"])
-    protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_SIZE)
+    protagonist_rect = pygame.Rect(0, 0, PROTAGONIST_SIZE, PROTAGONIST_HEIGHT)
     protagonist_rect.center = (int(protagonist_screen_x), int(protagonist_screen_y))
     if IMAGES["protagonist"] is not None:
         screen.blit(IMAGES["protagonist"], protagonist_rect)
@@ -1688,7 +1699,7 @@ def draw_interaction_hint():
 
     screen_x, screen_y = world_to_screen(protagonist["x"], protagonist["y"])
     hint_surface = hint_font.render("Press E", True, WHITE)
-    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_SIZE))
+    hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_HEIGHT))
     screen.blit(hint_surface, hint_rect)
 
 def show_item_popup(title, description, icon_image=None):
@@ -1788,11 +1799,14 @@ def draw_hp_bar():
 def draw_hearts():
     """
     Draws the player's remaining hearts (simple filled/outline circles)
-    just under the HP bar, since both are always-visible survival stats.
+    below the HP bar and its numeric readout, with enough vertical
+    clearance below the HP text (computed from the font's own line size,
+    rather than a fixed guess) that the two never overlap.
     """
     heart_radius = 8
     start_x = HP_BAR_POS[0] + heart_radius
-    start_y = HP_BAR_POS[1] + HP_BAR_HEIGHT + 26
+    hp_text_bottom = HP_BAR_POS[1] + HP_BAR_HEIGHT + 4 + hint_font.get_linesize()
+    start_y = hp_text_bottom + heart_radius + 10
 
     for i in range(MAX_HEARTS):
         center = (start_x + i * (heart_radius * 2 + 6), start_y)
@@ -2020,7 +2034,10 @@ def resolve_dialogue_choice(index):
 def draw_dialogue_choice():
     """
     Draws the current dialogue backdrop with the 3-option choice menu
-    overlaid in a tall text box near the bottom of the screen.
+    overlaid in a text box near the bottom of the screen. The box's
+    height grows to fit however much text each option needs, the same
+    way draw_text_box does, so the choices and the "Use UP/DOWN..." hint
+    never overlap or spill outside the box.
     """
     global choice_option_rects
 
@@ -2029,18 +2046,24 @@ def draw_dialogue_choice():
     else:
         screen.fill(BARREN_BG)
 
-    box_rect = pygame.Rect(50, 330, SCREEN_WIDTH - 100, 240)
+    box_width = SCREEN_WIDTH - 100
+    max_text_width = box_width - 40
+    line_height = dialogue_font.get_linesize()
+
+    wrapped_options = [wrap_text(option_text, dialogue_font, max_text_width) for option_text in choice_options]
+    content_height = 15 + sum(len(lines) * line_height + 6 for lines in wrapped_options) + 40
+    box_height = max(240, content_height)
+    box_bottom = SCREEN_HEIGHT - 30
+    box_top = max(140, box_bottom - box_height)
+    box_rect = pygame.Rect(50, box_top, box_width, box_bottom - box_top)
+
     pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
     pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
-    max_text_width = box_rect.width - 40
-    line_height = dialogue_font.get_linesize()
-
     choice_option_rects = []
     current_y = box_rect.y + 15
-    for i, option_text in enumerate(choice_options):
+    for i, wrapped_lines in enumerate(wrapped_options):
         color = HIGHLIGHT if i == choice_selected_option else WHITE
-        wrapped_lines = wrap_text(option_text, dialogue_font, max_text_width)
         option_top = current_y
         for line in wrapped_lines:
             line_surface = dialogue_font.render(line, True, color)
