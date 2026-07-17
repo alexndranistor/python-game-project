@@ -24,13 +24,17 @@ desert_hint_start_time = 0
 HINT_VISIBLE_DURATION = 2000
 HINT_FADE_DURATION = 2000
 
-# --- Colours (RGB tuples)
-BARREN_BG = (120, 100, 70)
-WHITE = (255, 255, 255)
-HIGHLIGHT = (255, 215, 0)
-BLACK = (0, 0, 0)
+# --- Colours (RGB tuples) - softened, flower-inspired palette
+BARREN_BG = (238, 200, 190)
+WHITE = (255, 248, 240)
+HIGHLIGHT = (240, 130, 60)
+BLACK = (45, 35, 40)
 DESERT_BG = (194, 178, 128)
 SWAMP_BG = (70, 90, 60)
+TITLE_BG_TOP = (255, 226, 214)
+TITLE_BG_BOTTOM = (240, 188, 205)
+TITLE_TEXT_COLOR = (196, 74, 132)
+SOFT_HINT_COLOR = (205, 175, 185)
 
 # --- Fonts (pygame doesn't ship a dedicated pixel font, so this tries a
 # few common blocky/monospace system fonts for a more retro feel, and
@@ -44,10 +48,10 @@ def get_pixel_font(size):
     return pygame.font.SysFont(None, size)
 
 
-title_font = get_pixel_font(64)
-menu_font = get_pixel_font(40)
-dialogue_font = get_pixel_font(32)
-hint_font = get_pixel_font(20)
+title_font = get_pixel_font(52)
+menu_font = get_pixel_font(30)
+dialogue_font = get_pixel_font(24)
+hint_font = get_pixel_font(16)
 
 # --- Core state machine
 # Valid values so far: "TITLE", "DIALOGUE", "DIALOGUE_CHOICE", "ROOM", "ITEM_POPUP", "PAUSED", "SETTINGS_PLACEHOLDER", "SAVE_PLACEHOLDER", "GAME_OVER", "WIN"
@@ -59,7 +63,7 @@ menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
 # --- Player data
-PROTAGONIST_SIZE = 40
+PROTAGONIST_SIZE = 72
 PLAYER_SPEED = 4
 protagonist = {
     "name": "Protagonist",
@@ -75,7 +79,7 @@ paused_from_state = None
 
 item_popup_title = ""
 item_popup_description = ""
-item_popup_icon_path = None
+item_popup_icon_image = None
 previous_state_before_popup = None
 ITEM_POPUP_ICON_SIZE = 64
 
@@ -154,7 +158,7 @@ DECOY_FLOWER_EATEN_TEXT = [
 
 # --- Sprite companion (placeholder appearance for now) -------------------
 SPRITE_CHAR_COLOR = (255, 240, 150)
-SPRITE_CHAR_RADIUS = 10
+SPRITE_CHAR_RADIUS = 15
 SPRITE_CHAR_OFFSET = (35, -35)
 SPRITE_ENTRANCE_DURATION = 700
 SPRITE_ENTRANCE_START_Y = -50
@@ -608,19 +612,19 @@ def load_sheet_frame(path, crop_box, size=None):
 # function below already falls back to its original plain shape in that case.
 IMAGES = {
     "protagonist": load_image_safe("assets/protagonist.png", (PROTAGONIST_SIZE, PROTAGONIST_SIZE)),
-    "sprite": load_sheet_frame("assets/sprite_spritesheet.png", (0, 0, 20, 16), (SPRITE_CHAR_RADIUS * 2, SPRITE_CHAR_RADIUS * 2)),
-    "rat": load_sheet_frame("assets/grumpy_rat.png", (0, 0, 32, 32), (24, 24)),
-    "decoy_flower_desert": load_image_safe("assets/first_decoy_flower_desert.png", (24, 24)),
-    "ice_flower": load_image_safe("assets/ice_flower.png", (24, 24)),
-    "sunroot_bloom": load_image_safe("assets/Flower 8 - ORANGE.png", (24, 24)),
-    "cactus_blossom": load_image_safe("assets/Flower 2 - MAGENTA.png", (24, 24)),
-    "decoy_weed_desert": load_image_safe("assets/Flower 12 - RED.png", (24, 24)),
-    "marshglow_lily": load_image_safe("assets/Flower 12 - YELLOW.png", (24, 24)),
-    "bogroot_bell": load_image_safe("assets/Flower 7 - PURPLE.png", (24, 24)),
-    "mistpetal_reed": load_image_safe("assets/Flower 7 - BLUE.png", (24, 24)),
-    "blistercap_bloom": load_image_safe("assets/Flower 8 - RED.png", (24, 24)),
-    "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (24, 24)),
-    "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (24, 24)),
+    "sprite": load_sheet_frame("assets/sprite_spritesheet.png", (2, 2, 16, 12), (SPRITE_CHAR_RADIUS * 2, SPRITE_CHAR_RADIUS * 2)),
+    "rat": load_sheet_frame("assets/grumpy_rat.png", (0, 0, 32, 32), (32, 32)),
+    "decoy_flower_desert": load_image_safe("assets/Flower 8 - PINK.png", (32, 32)),
+    "ice_flower": load_image_safe("assets/ice_flower.png", (32, 32)),
+    "sunroot_bloom": load_image_safe("assets/Flower 8 - ORANGE.png", (32, 32)),
+    "cactus_blossom": load_image_safe("assets/Flower 2 - MAGENTA.png", (32, 32)),
+    "decoy_weed_desert": load_image_safe("assets/Flower 12 - RED.png", (32, 32)),
+    "marshglow_lily": load_image_safe("assets/Flower 12 - YELLOW.png", (32, 32)),
+    "bogroot_bell": load_image_safe("assets/Flower 7 - PURPLE.png", (32, 32)),
+    "mistpetal_reed": load_image_safe("assets/Flower 7 - BLUE.png", (32, 32)),
+    "blistercap_bloom": load_image_safe("assets/Flower 8 - RED.png", (32, 32)),
+    "stingmoss_tangle": load_image_safe("assets/Flower 10 - PURPLE.png", (32, 32)),
+    "swamp_decoy_weed": load_image_safe("assets/Flower 6 - PINK 2.png", (32, 32)),
 }
 
 
@@ -719,9 +723,9 @@ def draw_title_screen():
     underneath the menu once at least one game has been played.
     """
     global menu_option_rects
-    screen.fill(BARREN_BG)
+    draw_vertical_gradient(TITLE_BG_TOP, TITLE_BG_BOTTOM)
 
-    title_surface = title_font.render("MY GAME TITLE", True, WHITE)
+    title_surface = title_font.render("MY GAME TITLE", True, TITLE_TEXT_COLOR)
     title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150))
     screen.blit(title_surface, title_rect)
 
@@ -735,7 +739,7 @@ def draw_title_screen():
 
     if games_played > 0:
         stats_surface = hint_font.render(
-            f"Games played: {games_played}   Wins: {total_wins}", True, (180, 180, 180)
+            f"Games played: {games_played}   Wins: {total_wins}", True, SOFT_HINT_COLOR
         )
         stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
         screen.blit(stats_surface, stats_rect)
@@ -835,7 +839,7 @@ def draw_text_box(text):
         line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    hint_surface = hint_font.render("Press SPACE to continue", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press SPACE to continue", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
     screen.blit(hint_surface, hint_rect)
 
@@ -1081,9 +1085,8 @@ def draw_room():
             draw_decoy_flower_glow()
             draw_decoy_flower()
         if not ice_flower_collected:
-            if ice_flower_encountered:
-                draw_ice_flower_glow()
-                draw_ice_flower()
+            draw_ice_flower_glow()
+            draw_ice_flower()
         if checklist_visible:
             draw_ingredient_flowers()
     elif current_room == "swamp":
@@ -1171,7 +1174,7 @@ def draw_pause_menu():
         screen.blit(option_surface, option_rect)
         pause_option_rects.append(option_rect)
 
-    hint_surface = hint_font.render("Press ESC to resume", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press ESC to resume", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
@@ -1235,7 +1238,7 @@ def draw_placeholder_screen():
         line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 300 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    hint_surface = hint_font.render("Press ESC to go back", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press ESC to go back", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
@@ -1649,7 +1652,7 @@ def consume_ice_flower():
     show_item_popup(
         title="Ice Flower",
         description="A pale, icy-cool flower. Eating it soothes the desert heat, restores 80 HP, and grants lasting immunity to the heat for the rest of your journey.",
-        icon_path=None,
+        icon_image=IMAGES["ice_flower"],
     )
     show_hp_heal_popup(80)
 
@@ -1688,16 +1691,16 @@ def draw_interaction_hint():
     hint_rect = hint_surface.get_rect(center=(int(screen_x), int(screen_y) - PROTAGONIST_SIZE))
     screen.blit(hint_surface, hint_rect)
 
-def show_item_popup(title, description, icon_path=None):
+def show_item_popup(title, description, icon_image=None):
     """
     Opens the small item-info popup window.
     """
-    global item_popup_title, item_popup_description, item_popup_icon_path
+    global item_popup_title, item_popup_description, item_popup_icon_image
     global previous_state_before_popup, game_state
 
     item_popup_title = title
     item_popup_description = description
-    item_popup_icon_path = icon_path
+    item_popup_icon_image = icon_image
     previous_state_before_popup = "ROOM"
     game_state = "ITEM_POPUP"
 
@@ -1713,11 +1716,10 @@ def draw_item_popup():
     pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
     icon_rect = pygame.Rect(box_rect.x + 20, box_rect.y + 20, ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE)
-    if item_popup_icon_path is None:
+    if item_popup_icon_image is None:
         pygame.draw.rect(screen, (150, 150, 150), icon_rect, border_radius=10)
     else:
-        icon_surface = pygame.image.load(item_popup_icon_path).convert_alpha()
-        icon_surface = pygame.transform.scale(icon_surface, (ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE))
+        icon_surface = pygame.transform.scale(item_popup_icon_image, (ITEM_POPUP_ICON_SIZE, ITEM_POPUP_ICON_SIZE))
         screen.blit(icon_surface, icon_rect)
 
     title_surface = dialogue_font.render(item_popup_title, True, WHITE)
@@ -1732,7 +1734,7 @@ def draw_item_popup():
         line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, icon_rect.bottom + 20 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    hint_surface = hint_font.render("Press SPACE to close", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press SPACE to close", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
     screen.blit(hint_surface, hint_rect)
 
@@ -2049,7 +2051,7 @@ def draw_dialogue_choice():
         choice_option_rects.append(pygame.Rect(box_rect.x + 20, option_top, max_text_width, option_bottom - option_top))
         current_y += 6
 
-    hint_surface = hint_font.render("Use UP/DOWN and ENTER to choose", True, (180, 180, 180))
+    hint_surface = hint_font.render("Use UP/DOWN and ENTER to choose", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(bottomright=(box_rect.right - 15, box_rect.bottom - 10))
     screen.blit(hint_surface, hint_rect)
 
@@ -2453,7 +2455,7 @@ def consume_swamp_harmful_flower():
     show_item_popup(
         title=SWAMP_HARMFUL_FLOWER_NAME,
         description=SWAMP_HARMFUL_FLOWER_REACTION_DESC,
-        icon_path=None,
+        icon_image=IMAGES["blistercap_bloom"],
     )
 
 
@@ -2474,7 +2476,7 @@ def consume_swamp_harmful_weed():
     show_item_popup(
         title=SWAMP_HARMFUL_WEED_NAME,
         description=SWAMP_HARMFUL_WEED_REACTION_DESC,
-        icon_path=None,
+        icon_image=IMAGES["stingmoss_tangle"],
     )
 
 
@@ -2932,7 +2934,7 @@ def draw_game_over_screen():
         line_rect = line_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + i * line_height))
         screen.blit(line_surface, line_rect)
 
-    hint_surface = hint_font.render("Press ENTER to try again", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press ENTER to try again", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
@@ -3060,7 +3062,7 @@ def draw_win_screen():
     stats_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, 320 + len(wrapped_lines) * line_height + 20))
     screen.blit(stats_surface, stats_rect)
 
-    hint_surface = hint_font.render("Press ENTER to play again", True, (180, 180, 180))
+    hint_surface = hint_font.render("Press ENTER to play again", True, SOFT_HINT_COLOR)
     hint_rect = hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
     screen.blit(hint_surface, hint_rect)
 
