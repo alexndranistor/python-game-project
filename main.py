@@ -21,10 +21,10 @@ pygame.display.set_caption("My Game")
 clock = pygame.time.Clock()
 
 # --- Desert control hint (fades out after appearing)
-previous_game_state = None       # Tracks the last frame's game_state, to detect state changes
-desert_hint_start_time = 0       # Timestamp (ms) the player entered the desert room
-HINT_VISIBLE_DURATION = 2000     # How long the control hint stays fully visible (ms)
-HINT_FADE_DURATION = 2000        # How long it takes to fade out after that (ms)
+previous_game_state = None
+desert_hint_start_time = 0
+HINT_VISIBLE_DURATION = 2000
+HINT_FADE_DURATION = 2000
 
 # --- Colours (RGB tuples)
 BARREN_BG = (120, 100, 70)
@@ -49,12 +49,12 @@ menu_options = ["New Game", "Quit"]
 menu_option_rects = []
 
 # --- Player data
-PROTAGONIST_SIZE = 40   # Width/height in pixels of the protagonist's placeholder square
-PLAYER_SPEED = 4         # Pixels moved per frame while a direction key is held
+PROTAGONIST_SIZE = 40
+PLAYER_SPEED = 4
 
 protagonist = {
     "name": "Protagonist",
-    "x": 1200,  # Positioned within the wider desert world, not just the screen!!
+    "x": 1200,
     "y": SCREEN_HEIGHT // 2,
 }
 
@@ -62,13 +62,13 @@ protagonist = {
 pause_menu_options = ["Settings", "Save", "Quit Game"]
 pause_selected_option = 0
 pause_option_rects = []
-paused_from_state = None  # Which gameplay state to return to when unpausing
+paused_from_state = None
 
-item_popup_title = ""               # Item name shown at the top of the popup
-item_popup_description = ""         # Short description/effect text shown inside the popup
-item_popup_icon_path = None         # Real icon image path later; None draws a placeholder square for now
-previous_state_before_popup = None  # Which state to return to once the popup closes
-ITEM_POPUP_ICON_SIZE = 64           # Width/height in pixels of the icon area inside the popup
+item_popup_title = ""
+item_popup_description = ""
+item_popup_icon_path = None
+previous_state_before_popup = None
+ITEM_POPUP_ICON_SIZE = 64
 
 # --- Placeholder screens (Settings & Save aren't built yet) --------------
 PLACEHOLDER_SCREENS = {
@@ -99,7 +99,7 @@ text_reveal_speed = 30
 last_reveal_time = 0
 next_state_after_dialogue = "DESERT_ROOM"
 
-dialogue_backdrop_state = None  # Which scene (if any) to draw behind the dialogue box
+dialogue_backdrop_state = None
 
 # --- Desert biome opening dialogue -------------------------------------------------
 DESERT_INTRO_TEXT = [
@@ -110,27 +110,27 @@ DESERT_INTRO_TEXT = [
 ]
 
 # --- Decoy flower (desert opening) ----------------------------------
-DECOY_FLOWER_POS = (1400, 300)          # Shifted to match the protagonist's new spawn point
+DECOY_FLOWER_POS = (1400, 300)
 DECOY_FLOWER_RADIUS = 50
 DECOY_FLOWER_COLOR = (180, 160, 90)
 decoy_flower_encountered = False
 
 # --- Adding a glow to the decoy flower as well ---------------------------
-DECOY_FLOWER_GLOW_COLOR = (255, 230, 150)   # Warm, inviting gold
+DECOY_FLOWER_GLOW_COLOR = (255, 230, 150)
 DECOY_FLOWER_GLOW_MIN_RADIUS = 18
 DECOY_FLOWER_GLOW_MAX_RADIUS = 26
-DECOY_FLOWER_GLOW_PERIOD = 900               # Milliseconds for one full pulse in and out
+DECOY_FLOWER_GLOW_PERIOD = 900
 
-ICE_FLOWER_POS = (100, 300)           # Far to the left, in the newly scrollable part of the desert
-ICE_FLOWER_COLOR = (180, 220, 240)     # Pale icy blue, distinct from the decoy flower
+ICE_FLOWER_POS = (100, 300)
+ICE_FLOWER_COLOR = (180, 220, 240)
 
-ICE_FLOWER_TRIGGER_RADIUS = 60        # How close the protagonist must get to be shown the hint
-ice_flower_encountered = False         # Whether the sprite has already pointed the flower out
+ICE_FLOWER_TRIGGER_RADIUS = 60
+ice_flower_encountered = False
 
 ICE_FLOWER_GLOW_COLOR = (200, 240, 255)
 ICE_FLOWER_GLOW_MIN_RADIUS = 18
 ICE_FLOWER_GLOW_MAX_RADIUS = 26
-ICE_FLOWER_GLOW_PERIOD = 900            # Milliseconds for one full pulse in and out
+ICE_FLOWER_GLOW_PERIOD = 900
 
 ICE_FLOWER_HINT_TEXT = [
     "\"Look - that one over there! Press E to pick it up!\"",
@@ -155,38 +155,38 @@ DECOY_FLOWER_EATEN_TEXT = [
 # --- Sprite companion (placeholder appearance for now) -------------------
 SPRITE_CHAR_COLOR = (255, 240, 150)
 SPRITE_CHAR_RADIUS = 10
-SPRITE_CHAR_OFFSET = (35, -35)   # Position relative to the protagonist, once hovering
-SPRITE_ENTRANCE_DURATION = 700    # Milliseconds for the fly-in entrance
-SPRITE_ENTRANCE_START_Y = -50     # Starting y position (above the screen) for the fly-in
-SPRITE_HOVER_AMPLITUDE = 6        # Pixels the sprite bobs up/down while hovering
-SPRITE_HOVER_PERIOD = 1200        # Milliseconds for one full up-down bob cycle
+SPRITE_CHAR_OFFSET = (35, -35)
+SPRITE_ENTRANCE_DURATION = 700
+SPRITE_ENTRANCE_START_Y = -50
+SPRITE_HOVER_AMPLITUDE = 6
+SPRITE_HOVER_PERIOD = 1200
 
-sprite_state = "HIDDEN"           # "HIDDEN", "ENTERING", or "HOVERING"
+sprite_state = "HIDDEN"
 sprite_entrance_start_time = 0
-sprite_draw_pos = [0, 0]          # Current on-screen position, recalculated every frame
+sprite_draw_pos = [0, 0]
 
 
 # --- HP ------------------------------------------------
 MAX_HP = 100
 hp = MAX_HP
-heat_drain_active = False   # Becomes True once the sprite's warning dialogue finishes
-heat_immune = False         # Once True (after eating the ice flower), the heat can never drain HP again
+heat_drain_active = False
+heat_immune = False
 last_hp_tick_time = 0
-HP_DRAIN_INTERVAL = 1000    # Milliseconds between each 1-point HP loss
+HP_DRAIN_INTERVAL = 1000
 HP_BAR_POS = (20, 20)
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
 
-HP_BAR_COLOR_HIGH = "#2ECC71"    # Green - shown when HP is 70 or above
-HP_BAR_COLOR_MID = "#E67E22"     # Orange - shown when HP is between 30 and 69
-HP_BAR_COLOR_LOW = "#E74C3C"     # Red - shown when HP is below 30
-HP_HEAL_POPUP_COLOR = "#2ECC71"  # Green - the floating "+80 HP" text shown on heal
+HP_BAR_COLOR_HIGH = "#2ECC71"
+HP_BAR_COLOR_MID = "#E67E22"
+HP_BAR_COLOR_LOW = "#E74C3C"
+HP_HEAL_POPUP_COLOR = "#2ECC71"
 
-hp_bar_visible = False   # Becomes True once heat drain first starts, and stays True for the rest of the game
+hp_bar_visible = False
 
-hp_heal_popup_text = None         # Text to show, e.g. "+80 HP"; None means nothing is showing
-hp_heal_popup_start_time = 0      # pygame.time.get_ticks() value from when it appeared
-HP_HEAL_POPUP_DURATION_MS = 1500  # How long the heal callout stays on screen, in milliseconds
+hp_heal_popup_text = None
+hp_heal_popup_start_time = 0
+HP_HEAL_POPUP_DURATION_MS = 1500
 
 # --- For allowing sprite tutorial-ish intro.
 dialogue_on_complete = None
@@ -198,31 +198,71 @@ nearby_interactable = None
 ice_flower_collected = False
 
 # --- Desert world & camera scrolling --------------------------------------
-DESERT_WORLD_WIDTH = 1600  # The desert extends further than a single screen
-camera_x = 0                # How far the camera has scrolled from the world's left edge
+DESERT_WORLD_WIDTH = 1600
+camera_x = 0
 
 
 
 # --- Arrow directing player to go left ---------------------------------------------
-LEFT_ARROW_COLOR = (255, 221, 89)      # Bright gold, easy to spot against the desert
-LEFT_ARROW_FLASH_PERIOD = 500           # Milliseconds for one full on/off blink cycle
-LEFT_ARROW_CENTER = (80, 260)           # Screen position, above the dialogue box
+LEFT_ARROW_COLOR = (255, 221, 89)
+LEFT_ARROW_FLASH_PERIOD = 500
+LEFT_ARROW_CENTER = (80, 260)
 LEFT_ARROW_SIZE = 40
 
-sprite_friendship_level = 0  # How much the sprite likes/trusts the player so far
-decoy_flower_eaten = False   # Whether the player has already eaten the decoy flower or not
-rat_friendship_level = 0     # How much the Rat likes/trusts the player so far (new companion counter)
+sprite_friendship_level = 0
+decoy_flower_eaten = False
+rat_friendship_level = 0
+
+# --- Sprite's true introduction (View 7) --------------------------------
+sprite_true_intro_played = False   # Whether View 7 (Sprite's real intro + alliance) has played yet
+
+SPRITE_TRUE_INTRO_TEXT = [
+    "\"See? All better now!\" She does a little spin in the air, clearly pleased with herself.",
+    "\"That's lesson one: nature can heal just as easily as it can hurt you - if you actually bother to ask it properly.\"",
+    "\"Right. Since you're not actively dying anymore, I suppose I owe you a proper introduction.\" She clears her throat, mock-formal. \"I am - or rather, I was - a fully trained, very seasoned herbalist. Tinctures, remedies, the occasional bit of showing off. I was good.\"",
+    "\"I was brewing something at home, actually, the exact moment that whole 'gigantic surge of magic' business happened. Whatever I was holding in my hands at the time didn't exactly play nice with all that raw power in the air.\"",
+    "\"Next thing I know - poof. This.\" She gestures at her tiny glowing self, thoroughly unimpressed. \"A sprite of light. No hands, no proper body, and somehow still expected to fix everything.\"",
+    "\"Which is a problem, considering I can't so much as hold a mixing spoon anymore, let alone brew a potion myself. And Floraborne isn't exactly going to save itself.\"",
+    "\"So. Lucky you. I need actual hands, and you've apparently got magic to spare. Whether that's enough to be useful remains... to be seen.\"",
+    "\"So? Are you in properly, or is this going to be a waste of both our time?\"",
+]
+
+SPRITE_CHOICE_1_OPTIONS = [
+    "I'm in. Whatever it takes to save this place.",
+    "I'll try my best, I guess.",
+    "Can't you just figure out some way to do it yourself?",
+]
+SPRITE_CHOICE_1_DELTAS = [3, 1, 0]
+SPRITE_CHOICE_1_REACTIONS = [
+    "\"Huh. Wasn't expecting that much enthusiasm out of you.\" A small, genuine smile creeps in despite prior reservations. \"...Don't make me regret this.\"",
+    "\"...I'll take it. Better than nothing, I suppose.\"",
+    "\"...Did you not hear literally anything I just said? No hands. No body. That's rather the point.\" She sighs. \"Congratulations. You're stuck with the job anyway.\"",
+]
+
+SPRITE_BETWEEN_CHOICES_TEXT = [
+    "She's already back to business, tone brisk. \"Anyway. Since we're apparently doing this together now-\"",
+    "\"-let me ask you something.\"",
+    "\"If we're going to have any hope of putting the balance back together, I need to know you actually care about what we're fixing - not just about getting to the other side of it. So. Does any of this-\" she gestures at the withered dunes \"-actually mean something to you?\"",
+]
+
+SPRITE_CHOICE_2_OPTIONS = [
+    "It means everything. The balance of nature is what keeps a place like this alive.",
+    "I don't understand it the way you do yet. But I want to.",
+    "Honestly? I just want to get through this as fast as possible.",
+]
+SPRITE_CHOICE_2_DELTAS = [3, 1, 0]
+SPRITE_CHOICE_2_REACTIONS = [
+    "Her light glows warmer, softer. \"...Okay. Good answer. Maybe you're not completely hopeless after all.\"",
+    "\"Fair enough. I suppose that's what I'm here for - to help you actually understand it.\"",
+    "\"Wow. Okay.\" A pause, stung. \"Remind me again why I'm bothering to help you?\"",
+]
 
 # --- Reusable dialogue-choice component ---------------------------------
-# Powers every friendship moment in the game (Rat and Sprite alike): 3
-# options worth different friendship points, shown as a simple selectable
-# menu, then chained into a one-line reaction dialogue via the existing
-# dialogue_on_complete system once an option is chosen.
-choice_options = []              # The 3 option strings currently on screen
-choice_deltas = []               # Friendship point change for each option, same order
-choice_reactions = []            # Reaction line shown after picking each option, same order
-choice_friendship_target = None  # "sprite" or "rat" - which counter to update
-choice_on_complete = None        # dialogue_on_complete value to chain into once the reaction line finishes
+choice_options = []
+choice_deltas = []
+choice_reactions = []
+choice_friendship_target = None
+choice_on_complete = None
 choice_selected_option = 0
 choice_option_rects = []
 
@@ -251,9 +291,6 @@ def activate_menu_option(option_name):
     """
     Perform whatever should happen when a title-screen menu option is
     chosen, whether by keyboard (Enter) or mouse click.
-
-    Args:
-        option_name (str): The label of the chosen option, e.g. "New Game" or "Quit".
     """
     global game_state, dialogue_lines, current_line_index
     global revealed_chars, last_reveal_time, next_state_after_dialogue
@@ -275,11 +312,7 @@ def activate_menu_option(option_name):
 
 def handle_title_input(event):
     """
-    Handle a single Pygame event while the title screen is active, covering
-    both keyboard navigation and mouse hover/click.
-
-    Args:
-        event (pygame.event.Event): The event to process.
+    Handle a single Pygame event while the title screen is active.
     """
     global selected_option
 
@@ -367,9 +400,6 @@ def handle_dialogue_input(event):
     On the final line, dialogue_on_complete decides what happens next: it
     either chains straight into another dialogue, or simply switches to
     next_state_after_dialogue as normal.
-
-    Args:
-        event (pygame.event.Event): The event to process.
     """
     global current_line_index, revealed_chars, game_state, dialogue_on_complete
 
@@ -387,6 +417,15 @@ def handle_dialogue_input(event):
                 if dialogue_on_complete == "START_DESERT_INTRO":
                     dialogue_on_complete = None
                     start_desert_intro_dialogue()
+                elif dialogue_on_complete == "SPRITE_CHOICE_1":
+                    dialogue_on_complete = None
+                    start_sprite_choice_1()
+                elif dialogue_on_complete == "SPRITE_BETWEEN_CHOICES":
+                    dialogue_on_complete = None
+                    start_sprite_between_choices_dialogue()
+                elif dialogue_on_complete == "SPRITE_CHOICE_2":
+                    dialogue_on_complete = None
+                    start_sprite_choice_2()
                 else:
                     game_state = next_state_after_dialogue
                     dialogue_on_complete = None
@@ -933,16 +972,23 @@ def draw_item_popup():
 
 def handle_item_popup_input(event):
     """
-    Closes the item popup on Space/Enter or a mouse click, returning to
-    whichever state was active before it opened.
+    Closes the item popup on Space/Enter or a mouse click. Normally
+    returns to whichever state was active before it opened - but the
+    very first time the ice flower's popup is closed, it instead chains
+    straight into View 7 (Sprite's true introduction), rather than
+    dropping the player back into free movement.
     """
-    global game_state
+    global game_state, sprite_true_intro_played
 
     key_pressed = event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE)
     mouse_clicked = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
 
     if key_pressed or mouse_clicked:
-        game_state = previous_state_before_popup
+        if item_popup_title == "Ice Flower" and not sprite_true_intro_played:
+            sprite_true_intro_played = True
+            start_sprite_true_intro_dialogue()
+        else:
+            game_state = previous_state_before_popup
 
 def get_hp_bar_color(current_hp):
     """
@@ -1022,18 +1068,79 @@ def draw_hp_heal_popup():
     screen.blit(popup_surface, popup_rect)
 
 
+def start_sprite_true_intro_dialogue():
+    """
+    Plays View 7: Sprite's true introduction and her reluctant-alliance
+    pitch. Triggered once, automatically, the first time the ice flower's
+    item popup is closed. Ends by chaining into the first dialogue-choice
+    moment via dialogue_on_complete.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = SPRITE_TRUE_INTRO_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = "SPRITE_CHOICE_1"
+    game_state = "DIALOGUE"
+
+
+def start_sprite_choice_1():
+    """
+    Opens the first dialogue-choice moment of View 7 ("Are you in
+    properly...?"), feeding sprite_friendship_level.
+    """
+    start_dialogue_choice(
+        options=SPRITE_CHOICE_1_OPTIONS,
+        deltas=SPRITE_CHOICE_1_DELTAS,
+        reactions=SPRITE_CHOICE_1_REACTIONS,
+        target="sprite",
+        on_complete="SPRITE_BETWEEN_CHOICES",
+    )
+
+
+def start_sprite_between_choices_dialogue():
+    """
+    Plays the short connecting lines between View 7's two dialogue-choice
+    exchanges, ending on the second exchange's prompt line, then chains
+    into the second choice.
+    """
+    global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
+    global next_state_after_dialogue, dialogue_backdrop_state, dialogue_on_complete, game_state
+
+    dialogue_lines = SPRITE_BETWEEN_CHOICES_TEXT
+    current_line_index = 0
+    revealed_chars = 0
+    last_reveal_time = pygame.time.get_ticks()
+    next_state_after_dialogue = "DESERT_ROOM"
+    dialogue_backdrop_state = "DESERT_ROOM"
+    dialogue_on_complete = "SPRITE_CHOICE_2"
+    game_state = "DIALOGUE"
+
+
+def start_sprite_choice_2():
+    """
+    Opens the second dialogue-choice moment of View 7 ("Does any of this
+    actually mean something to you?"), feeding sprite_friendship_level.
+    Chains straight into View 8 once the reaction line finishes (not
+    wired up until Commit 5, so this is a no-op for now).
+    """
+    start_dialogue_choice(
+        options=SPRITE_CHOICE_2_OPTIONS,
+        deltas=SPRITE_CHOICE_2_DELTAS,
+        reactions=SPRITE_CHOICE_2_REACTIONS,
+        target="sprite",
+        on_complete="START_POTION_RECIPE_INTRO",
+    )
+
+
 def start_dialogue_choice(options, deltas, reactions, target, on_complete):
     """
     Opens the reusable 3-option dialogue-choice menu, used for every
     Rat/Sprite friendship moment in the game.
-
-    Args:
-        options (list[str]): The 3 option strings to show, warmest first.
-        deltas (list[int]): Friendship points awarded for each option, same order.
-        reactions (list[str]): Reaction line shown after picking each option, same order.
-        target (str): "sprite" or "rat" - which friendship counter to update.
-        on_complete (str): dialogue_on_complete value to chain into once the
-            chosen reaction line finishes playing.
     """
     global choice_options, choice_deltas, choice_reactions, choice_friendship_target
     global choice_on_complete, choice_selected_option, game_state
@@ -1052,9 +1159,6 @@ def resolve_dialogue_choice(index):
     Applies the friendship point change for the chosen option, then plays
     its reaction line as a normal one-line dialogue, chaining onward via
     choice_on_complete once that line finishes.
-
-    Args:
-        index (int): Which option (0, 1, or 2) the player picked.
     """
     global sprite_friendship_level, rat_friendship_level
     global dialogue_lines, current_line_index, revealed_chars, last_reveal_time
