@@ -1,9 +1,6 @@
 """
-My Game - a narrative exploration game built with Pygame.
-This file contains the game so far: the title screen, the opening
-catastrophe dialogue, and the desert biome (with basic player movement).
-The game uses a simple state machine (the `game_state` global variable) to
-decide what to draw and which inputs to listen for each frame.
+Floraborne, a narrative exploration game built with Pygame.
+
 """
 import pygame
 import sys
@@ -51,7 +48,7 @@ def get_pixel_font(size):
 
 title_font = get_pixel_font(52)
 menu_font = get_pixel_font(30)
-dialogue_font = get_pixel_font(24)
+dialogue_font = get_pixel_font(20)
 hint_font = get_pixel_font(16)
 
 # --- Core state machine
@@ -112,6 +109,7 @@ text_reveal_speed = 30
 last_reveal_time = 0
 next_state_after_dialogue = "ROOM"
 dialogue_backdrop_state = None
+DIALOGUE_BOX_HEIGHT = 150  # Fixed height so the box never grows to fit long text; overflow scrolls instead.
 
 # --- Desert biome opening dialogue -------------------------------------------------
 DESERT_INTRO_TEXT = [
@@ -302,14 +300,14 @@ room_timer_start_time = 0
 # --- Ingredient flowers (View 8's checklist puzzle) ----------------------
 INGREDIENT_FLOWER_1_NAME = "Sunroot Bloom"
 INGREDIENT_FLOWER_2_NAME = "Cactus Blossom"
-INGREDIENT_FLOWER_1_POS = (700, 150)
-INGREDIENT_FLOWER_2_POS = (1020, 480)
+INGREDIENT_FLOWER_1_POS = (700, 220)
+INGREDIENT_FLOWER_2_POS = (1020, 380)
 INGREDIENT_FLOWER_TRIGGER_RADIUS = 50
 INGREDIENT_FLOWER_WITHERED_COLOR = (150, 130, 90)
 INGREDIENT_FLOWER_BLOOMED_COLOR = (255, 140, 180)
 ingredient_flower_1_collected = False
 ingredient_flower_2_collected = False
-DECOY_WEED_POS = (860, 540)
+DECOY_WEED_POS = (860, 380)
 DECOY_WEED_TRIGGER_RADIUS = 50
 DECOY_WEED_COLOR = (120, 110, 70)
 decoy_weed_interacted = False
@@ -358,8 +356,8 @@ SWAMP_CHECKLIST_POS = CHECKLIST_POS  # Reuses the same on-screen slot as the des
 SWAMP_INGREDIENT_FLOWER_1_NAME = "Marshglow Lily"
 SWAMP_INGREDIENT_FLOWER_2_NAME = "Bogroot Bell"
 SWAMP_INGREDIENT_FLOWER_3_NAME = "Mistpetal Reed"
-SWAMP_INGREDIENT_FLOWER_1_POS = (250, 180)
-SWAMP_INGREDIENT_FLOWER_2_POS = (600, 480)
+SWAMP_INGREDIENT_FLOWER_1_POS = (250, 220)
+SWAMP_INGREDIENT_FLOWER_2_POS = (600, 380)
 SWAMP_INGREDIENT_FLOWER_3_POS = (980, 220)
 SWAMP_INGREDIENT_WITHERED_COLOR = (90, 100, 70)
 SWAMP_INGREDIENT_BLOOMED_COLOR = (200, 150, 220)
@@ -378,7 +376,7 @@ SWAMP_HARMFUL_WEED_POS = (800, 400)
 SWAMP_HARMFUL_COLOR = (170, 40, 40)
 swamp_harmful_flower_eaten = False
 swamp_harmful_weed_eaten = False
-SWAMP_DECOY_WEED_POS = (150, 450)
+SWAMP_DECOY_WEED_POS = (150, 380)
 SWAMP_DECOY_WEED_COLOR = (80, 90, 60)
 swamp_decoy_weed_eaten = False
 SWAMP_HARMFUL_FLOWER_REACTION_DESC = (
@@ -415,14 +413,14 @@ SWAMP_POTION_BREWED_TEXT = [
 # --- Bridge repair puzzle (Commit 12) ------------------------------------
 SWAMP_BRIDGE_X = 1100
 BRIDGE_WIDTH = 24
-BRIDGE_TRIGGER_RADIUS = 60
+BRIDGE_TRIGGER_RADIUS = 80  # Bumped up from 60: while the bridge is unfixed, movement is clamped to 65px away from it, so 60 made it impossible to ever get within range
 BRIDGE_BROKEN_COLOR = (60, 50, 45)
 BRIDGE_FIXED_COLOR = (150, 110, 70)
 swamp_bridge_fixed = False
 TINKER_ITEM_1_NAME = "Rusty Cog"
 TINKER_ITEM_2_NAME = "Vine-Bound Plank"
 TINKER_ITEM_1_POS = (1000, 200)
-TINKER_ITEM_2_POS = (1050, 480)
+TINKER_ITEM_2_POS = (1050, 380)
 TINKER_ITEM_COLOR = (140, 140, 150)
 tinker_item_1_collected = False
 tinker_item_2_collected = False
@@ -853,27 +851,32 @@ def wrap_text(text, font, max_width):
 
 def draw_text_box(text):
     """
-    Draw the scrolling dialogue box at the bottom of the screen. The box's
-    height grows to fit however many wrapped lines the current text needs
-    (instead of a fixed height), growing upward from a fixed bottom margin,
-    so long lines never spill past the box edges or collide with the
-    "Press SPACE to continue" hint or anything else on screen.
+    Draw the dialogue box at the bottom of the screen. The box is always
+    the same fixed size (DIALOGUE_BOX_HEIGHT) rather than growing to fit
+    however much text is currently revealed - once the revealed text has
+    more wrapped lines than the box can hold, only the most recently
+    revealed lines are shown (older lines scroll out of view as more text
+    is typed out), so long lines never spill past the box edges or
+    collide with the "Press SPACE to continue" hint or anything else on
+    screen.
     """
     box_width = SCREEN_WIDTH - 100
     max_text_width = box_width - 40
     wrapped_lines = wrap_text(text, dialogue_font, max_text_width)
     line_height = dialogue_font.get_linesize()
 
-    content_height = 20 + line_height * len(wrapped_lines) + 30
-    box_height = max(150, content_height)
+    box_height = DIALOGUE_BOX_HEIGHT
     box_bottom = SCREEN_HEIGHT - 30
-    box_top = max(180, box_bottom - box_height)
-    box_rect = pygame.Rect(50, box_top, box_width, box_bottom - box_top)
+    box_top = box_bottom - box_height
+    box_rect = pygame.Rect(50, box_top, box_width, box_height)
 
     pygame.draw.rect(screen, BLACK, box_rect, border_radius=18)
     pygame.draw.rect(screen, WHITE, box_rect, 3, border_radius=18)
 
-    for i, line in enumerate(wrapped_lines):
+    max_visible_lines = max(1, (box_height - 50) // line_height)
+    visible_lines = wrapped_lines[-max_visible_lines:]
+
+    for i, line in enumerate(visible_lines):
         line_surface = dialogue_font.render(line, True, WHITE)
         line_rect = line_surface.get_rect(topleft=(box_rect.x + 20, box_rect.y + 20 + i * line_height))
         screen.blit(line_surface, line_rect)
